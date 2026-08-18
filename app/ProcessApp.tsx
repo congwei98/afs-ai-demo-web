@@ -15,6 +15,7 @@ import {
   CheckCircle,
   CheckSquare,
   ClipboardText,
+  Cpu,
   Database,
   Eye,
   FileText,
@@ -31,7 +32,6 @@ import {
   Play,
   PaperPlaneTilt,
   PhoneCall,
-  Robot,
   Scan,
   ShieldCheck,
   SquaresFour,
@@ -47,7 +47,7 @@ import {
 } from "@phosphor-icons/react";
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
-import { intakeDemo, type ConversationLine } from "@/data/intake-demo";
+import { historicalCalls, intakeDemo, type ConversationLine, type HistoricalCall } from "@/data/intake-demo";
 import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type EvidenceBlock, type ReviewAgent } from "@/data/review-plan";
 
 type ReviewState = "plan" | "running" | "results";
@@ -83,10 +83,6 @@ function StreamedLine({ line, visibleCharacters, corrected }: { line: Conversati
 function CompletionActionIcon({ index }: { index: number }) {
   const Icon = [CheckSquare, UploadSimple, Paperclip, ChatText][index] ?? CheckCircle;
   return <span className="completion-icon" aria-hidden="true"><Icon size={17} weight="regular" /></span>;
-}
-
-function StatusMark({ complete, active }: { complete?: boolean; active?: boolean }) {
-  return <span className={`status-mark ${complete ? "complete" : ""} ${active ? "active" : ""}`} aria-hidden="true">{complete ? <Check size={18} weight="bold" /> : active ? <span className="active-dot" /> : null}</span>;
 }
 
 export default function ProcessApp() {
@@ -153,7 +149,7 @@ export default function ProcessApp() {
   return (
     <main className="app-shell">
       <ProductHeader onHome={backToWorkbench} showProcess />
-      <StageStepper stage={stage} onSelect={(next) => next <= stage && setStage(next)} />
+      <StageStepper stage={stage} timeline={timeline} onSelect={(next) => next <= stage && setStage(next)} />
       <section className="case-layout">
         <div className="case-main">
           <CaseIdentity />
@@ -179,7 +175,6 @@ export default function ProcessApp() {
           {stage === 4 && <ConfirmationScreen decision={caseDecision} setDecision={setCaseDecision} bmwShare={bmwShare} setBmwShare={setBmwShare} dealerShare={dealerShare} setDealerShare={setDealerShare} confirmed={confirmed} setConfirmed={setConfirmed} onBack={() => setStage(3)} onConfirm={completeCase} />}
           {stage === 5 && <CompletionScreen decision={caseDecision} bmwShare={bmwShare} dealerShare={dealerShare} onWorkbench={backToWorkbench} />}
         </div>
-        <ExecutionPanel timeline={timeline} />
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
       {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} onClose={() => setRecommendationEvidence(null)} />}
@@ -247,12 +242,21 @@ function Workbench({ onOpen, completed }: { onOpen: () => void; completed: boole
   );
 }
 
-function StageStepper({ stage, onSelect }: { stage: number; onSelect: (stage: number) => void }) {
+function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: { label: string; done: boolean; active: boolean }[]; onSelect: (stage: number) => void }) {
+  const reviewStatus = timeline[3].done ? "Agent review completed" : timeline[2].done ? "Agents executing" : timeline[1].done ? "Plan prepared" : "Pending";
+  const stageStatuses = [
+    timeline[0].done ? "Complaint captured" : "Current step",
+    reviewStatus,
+    timeline[4].done ? "Recommendation prepared" : stage === 3 ? "Current step" : "Pending",
+    stage > 4 ? "Decision confirmed" : stage === 4 ? "Human decision" : "Pending",
+    timeline[5].done ? "Case completed" : stage === 5 ? "Current step" : "Pending",
+  ];
   return (
-    <nav className="stepper" aria-label="Case progress">
+    <nav className="stepper compact" aria-label="Case progress">
+      <div className="process-label"><span>PROCESS EXECUTION</span><strong>Customer complaint handling</strong></div>
       {steps.map((label, index) => {
         const number = index + 1;
-        return <button key={label} className={`step ${stage === number ? "active" : ""} ${stage > number ? "done" : ""}`} onClick={() => onSelect(number)} disabled={number > stage}><span>{stage > number ? <Check size={17} weight="bold" aria-hidden="true" /> : number}</span>{label}</button>;
+        return <button key={label} className={`step ${stage === number ? "active" : ""} ${stage > number ? "done" : ""}`} onClick={() => onSelect(number)} disabled={number > stage}><span>{stage > number ? <Check size={15} weight="bold" aria-hidden="true" /> : number}</span><b>{label}<small>{stageStatuses[index]}</small></b></button>;
       })}
     </nav>
   );
@@ -275,7 +279,11 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
   const [correctedLines, setCorrectedLines] = useState<Set<string>>(new Set());
   const [complete, setComplete] = useState(false);
   const [focusedEvidence, setFocusedEvidence] = useState<string | null>(null);
+  const [selectedCallId, setSelectedCallId] = useState<string>("current");
+  const [historyPlayingId, setHistoryPlayingId] = useState<string | null>(null);
+  const [historyProgress, setHistoryProgress] = useState(0);
   const conversation = intakeDemo.conversation;
+  const selectedHistoricalCall = historicalCalls.find((call) => call.id === selectedCallId);
   const currentLine = conversation[activeLine];
   const currentRawText = currentLine ? rawLineText(currentLine) : "";
   const totalCharacters = conversation.reduce((total, line) => total + rawLineText(line).length, 0);
@@ -293,14 +301,14 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
     if (!playing || source !== "call") return;
     if (visibleCharacters < currentRawText.length) {
       const previousCharacter = currentRawText.charAt(Math.max(0, visibleCharacters - 1));
-      const delay = /[,.?!—]/.test(previousCharacter) ? 260 : 62;
+      const delay = /[,.?!—]/.test(previousCharacter) ? 130 : 31;
       const timer = window.setTimeout(() => setVisibleCharacters((count) => count + 1), delay);
       return () => window.clearTimeout(timer);
     }
 
     const hasCorrection = currentLine.parts.some((part) => part.correction);
     if (hasCorrection && !correctedLines.has(currentLine.id)) {
-      const timer = window.setTimeout(() => setCorrectedLines((lines) => new Set(lines).add(currentLine.id)), 1150);
+      const timer = window.setTimeout(() => setCorrectedLines((lines) => new Set(lines).add(currentLine.id)), 575);
       return () => window.clearTimeout(timer);
     }
 
@@ -308,16 +316,29 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
       const timer = window.setTimeout(() => {
         setActiveLine((line) => line + 1);
         setVisibleCharacters(0);
-      }, 720);
+      }, 360);
       return () => window.clearTimeout(timer);
     }
 
     const timer = window.setTimeout(() => {
       setComplete(true);
       setPlaying(false);
-    }, 850);
+    }, 425);
     return () => window.clearTimeout(timer);
   }, [activeLine, conversation.length, correctedLines, currentLine, currentRawText, playing, setPlaying, source, visibleCharacters]);
+
+  useEffect(() => {
+    if (!historyPlayingId) return;
+    const timer = window.setTimeout(() => {
+      if (historyProgress >= 96) {
+        setHistoryProgress(100);
+        setHistoryPlayingId(null);
+      } else {
+        setHistoryProgress((current) => current + 4);
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [historyPlayingId, historyProgress]);
 
   const toggleAnalysis = () => {
     setFocusedEvidence(null);
@@ -336,14 +357,31 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
     window.setTimeout(() => setFocusedEvidence(null), 2200);
   };
 
+  const selectCall = (id: string) => {
+    setPlaying(false);
+    setSelectedCallId(id);
+    setHistoryPlayingId(null);
+    setHistoryProgress(0);
+  };
+
+  const toggleHistoryPlayback = (id: string) => {
+    if (historyPlayingId === id) {
+      setHistoryPlayingId(null);
+      return;
+    }
+    if (historyProgress >= 100) setHistoryProgress(0);
+    setHistoryPlayingId(id);
+  };
+
   return (
     <section className="screen-panel intake-screen">
-      <div className="screen-heading"><div><p className="section-kicker">ORIGINAL COMPLAINT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
+      <div className="screen-heading"><div><p className="section-kicker">ORIGINAL COMPLAINT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
       </div>
-      {source === "call" ? (
+      {source === "call" && <section className="call-sequence" aria-label="Related customer call history"><header><div><span>RELATED CONTACT HISTORY</span><h3>How this complaint developed</h3></div><small>3 previous calls linked by AI</small></header><div className="call-sequence-track">{historicalCalls.map((call) => <button key={call.id} className={selectedCallId === call.id ? "active" : ""} onClick={() => selectCall(call.id)}><span>{call.sequence}</span><div><small>{call.date}</small><strong>{call.title}</strong><em>{call.relationship}</em></div></button>)}<button className={`current ${selectedCallId === "current" ? "active" : ""}`} onClick={() => selectCall("current")}><span>4</span><div><small>12 May 2026 · Current</small><strong>Formal Three Guarantees complaint</strong><em>Fault returned after repair visit 3</em></div></button></div></section>}
+      {source === "call" && selectedCallId === "current" ? (
         <div className="intake-workspace">
           <div className="call-stage">
             <div className="audio-console">
@@ -391,11 +429,30 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
             </section>
           )}
         </div>
+      ) : source === "call" && selectedHistoricalCall ? (
+        <HistoricalCallView call={selectedHistoricalCall} playing={historyPlayingId === selectedHistoricalCall.id} progress={historyProgress} onToggle={() => toggleHistoryPlayback(selectedHistoricalCall.id)} />
       ) : (
         <div className="complaint-card scan-card"><div className="scan-preview"><FileText size={34} aria-hidden="true" /><span>SCANNED</span><strong>{caseData.complaint.scanReference}</strong></div><div><span className="field-label">Source</span><h3>{caseData.complaint.scanSource}</h3><p>{caseData.complaint.scanSummary}</p></div></div>
       )}
       {source === "scan" && <><h3 className="subheading">Extracted Information</h3><div className="extracted-grid"><article className="extracted-item issue"><div className="extracted-icon"><WarningCircle size={25} aria-hidden="true" /></div><div><span>Issue</span><strong>{caseData.issue}</strong></div></article><article className="extracted-item request"><div className="extracted-icon"><ClipboardText size={25} aria-hidden="true" /></div><div><span>Request</span><strong>{caseData.request}</strong></div></article><article className="extracted-item priority-item"><div className="extracted-icon"><Flag size={25} aria-hidden="true" /></div><div><span>Priority</span><strong>{caseData.priority}</strong></div></article></div></>}
       <div className="screen-actions"><span className="intake-action-hint">{source === "call" && !complete ? "Analyze the recording to continue" : "Complaint information is ready"}</span><button className="primary-button wide button-with-icon" onClick={onNext} disabled={source === "call" && !complete}>Start Review<ArrowRight size={18} aria-hidden="true" /></button></div>
+    </section>
+  );
+}
+
+function HistoricalCallView({ call, playing, progress, onToggle }: { call: HistoricalCall; playing: boolean; progress: number; onToggle: () => void }) {
+  return (
+    <section className="history-call-workspace">
+      <div className="history-call-main">
+        <div className="audio-console historical">
+          <div className={`recording-icon ${playing ? "live" : ""}`} aria-hidden="true"><PhoneCall size={21} /></div>
+          <button className="audio-button" aria-label={playing ? `Pause ${call.title}` : `Play ${call.title}`} onClick={onToggle}>{playing ? <Pause size={20} weight="fill" /> : <Play size={20} weight="fill" />}</button>
+          <div className="audio-track"><div className="audio-meta"><strong>{call.date} · Customer Call</strong><span>{call.duration}</span></div><div className={`wave-bars ${playing ? "playing" : ""}`} aria-hidden="true">{Array.from({ length: 44 }, (_, index) => <i key={index} style={{ height: `${7 + ((index * 13) % 23)}px` }} />)}</div><div className="audio-progress"><span style={{ width: `${progress}%` }} /></div></div>
+          <button className="analyze-button" onClick={onToggle}>{playing ? "Pause" : progress >= 100 ? "Replay" : "Play recording"}</button>
+        </div>
+        <div className="historical-transcript"><div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Analyzed transcript</strong></div><span><CheckCircle size={15} weight="fill" />Speaker separation complete</span></div><div className="conversation-stream">{call.conversation.map((line) => <article className={`utterance fixed ${line.speaker === "Customer" ? "customer" : "agent"}`} key={`${line.time}-${line.speaker}`}><div className="speaker-line"><strong>{line.speaker}</strong><span>{line.time}</span></div><p>{line.text}</p></article>)}</div></div>
+      </div>
+      <aside className="history-ai-summary"><div className="history-summary-heading"><span><MagicWand size={19} /></span><div><small>AI-ANALYZED SUMMARY</small><h3>{call.title}</h3></div><b>Call {call.sequence} of 4</b></div><div className="history-continuity"><FlowArrow size={19} /><p><strong>Connection to current complaint</strong>{call.summary.continuity}</p></div><dl><div><dt>Contact reason</dt><dd>{call.summary.reason}</dd></div><div><dt>Handling outcome</dt><dd>{call.summary.outcome}</dd></div><div><dt>Customer sentiment</dt><dd>{call.summary.sentiment}</dd></div></dl></aside>
     </section>
   );
 }
@@ -456,11 +513,13 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 
   const toggleEvidence = (id: string) => setEvidenceAgentId((current) => current === id ? null : id);
 
-  const updateRequirement = (id: string, requirement: string) => setAgents((current) => current.map((agent) => agent.id === id ? { ...agent, requirement } : agent));
+  const updateAgent = (id: string, changes: Partial<ReviewAgent>) => setAgents((current) => current.map((agent) => agent.id === id ? { ...agent, ...changes } : agent));
 
   const addAgent = (agent: ReviewAgent) => {
-    setAgents((current) => current.some((item) => item.id === agent.id) ? current : [...current, { ...agent }]);
-    setExpandedAgents((current) => new Set(current).add(agent.id));
+    const sequence = agents.filter((item) => item.id.startsWith(`${agent.id}-`)).length + 1;
+    const newAgent = { ...agent, id: `${agent.id}-${sequence}`, name: agent.category === "parts" ? `New Data Agent ${sequence}` : `OCR Agent ${sequence}` };
+    setAgents((current) => [...current, newAgent]);
+    setExpandedAgents((current) => new Set(current).add(newAgent.id));
     setAddOpen(false);
   };
 
@@ -499,7 +558,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
           <header className="network-heading"><div><span>AGENT COLLABORATION</span><h3>{state === "running" ? "Customer Care is coordinating the review" : "All Agent results returned"}</h3><p>{state === "running" ? "A7 sends one business request at a time and receives the result before continuing." : "Select Evidence on any Agent to review its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Live execution</> : <><CheckCircle size={16} weight="fill" />Review complete</>}</span></header>
           <div className="network-canvas">
             <div className="planner-robot">
-              <div className="robot-avatar planner" aria-hidden="true"><Robot size={82} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
+              <div className="robot-avatar planner" aria-hidden="true"><Cpu size={72} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
               <strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small>
             </div>
             <div className="agent-network-list">
@@ -511,7 +570,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 return <div className={`network-agent-row ${done ? "done" : ""} ${active ? "active" : ""}`} key={agent.id}>
                   <div className={`agent-connection ${phase}`}><span className="network-packet">{runPhase === "return" && active ? <Check size={14} weight="bold" /> : <PaperPlaneTilt size={15} weight="fill" />}</span><b>{active ? runPhase === "return" ? "RESULT" : runPhase === "working" ? "PROCESSING" : "REQUEST" : done ? "RESULT RECEIVED" : "QUEUED"}</b></div>
                   <div className="agent-robot-node">
-                    <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Robot size={68} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
+                    <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Cpu size={58} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
                     <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agent.role}</em><small>{status}</small></div>
                     {state === "results" && <button onClick={() => toggleEvidence(agent.id)} aria-expanded={evidenceAgentId === agent.id}><Eye size={16} />{evidenceAgentId === agent.id ? "Hide Evidence" : "View Evidence"}</button>}
                   </div>
@@ -526,7 +585,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 
       {state === "plan" && <div className="action-plan-heading"><div><p>RECOMMENDED ACTION PLAN</p><h3>{agents.length} review steps</h3><span>Open any step to review or edit the AI-generated requirement.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
-      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add another review step</strong><span>Human-added Agents join the same authorization and execution flow.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} disabled={agents.some((item) => item.id === agent.id)} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.name}<small>{agent.system} · {agent.role}</small></strong><Plus size={18} /></button>)}</section>}
+      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name, source and request.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "parts" ? "Data Agent" : "OCR Agent"}<small>{agent.category === "parts" ? "Connect a data source and define a query" : "Read and validate complaint documents"}</small></strong><Plus size={18} /></button>)}</section>}
 
       {state === "plan" && <div className="review-agent-list">
         {agents.map((agent, index) => {
@@ -542,7 +601,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 <span className="card-status">Ready</span>
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
-              {expanded && <div className="agent-card-body"><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateRequirement(agent.id, event.target.value)} /></label></div>}
+              {expanded && <div className="agent-card-body"><div className="agent-config-grid"><label><span><PencilSimple size={15} />Agent name <b>Editable</b></span><input aria-label={`${agent.name} name`} value={agent.name} onChange={(event) => updateAgent(agent.id, { name: event.target.value })} /></label><label><span><Database size={15} />Source system <b>Editable</b></span><input aria-label={`${agent.name} source system`} value={agent.system} onChange={(event) => updateAgent(agent.id, { system: event.target.value })} /></label></div><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateAgent(agent.id, { requirement: event.target.value })} /></label></div>}
             </article>
           );
         })}
@@ -556,7 +615,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 function RecommendationScreen({ agents, onEvidence, onNext }: { agents: ReviewAgent[]; onEvidence: (agentId: string) => void; onNext: () => void }) {
   return (
     <section className="screen-panel recommendation-screen">
-      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE RECOMMENDATION</p><h2>Compensation Recommendation</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on 3 Agent results</span></div>
+      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE RECOMMENDATION</p><h2>Compensation Recommendation</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on {agents.length} Agent results</span></div>
       <section className="settlement-overview">
         <div className="coverage-result"><span>THREE GUARANTEES ASSESSMENT</span><strong><CheckCircle size={20} weight="fill" />Applicable</strong></div>
         <div className="allocation-result"><span>RECOMMENDED COMMERCIAL COMPENSATION</span><div><strong>BMW <b>{settlementRecommendation.bmwShare}%</b></strong><strong>Dealer <b>{settlementRecommendation.dealerShare}%</b></strong></div><div className="allocation-bar" aria-label={`BMW ${settlementRecommendation.bmwShare} percent, Dealer ${settlementRecommendation.dealerShare} percent`}><span style={{ width: `${settlementRecommendation.bmwShare}%` }} /><i style={{ width: `${settlementRecommendation.dealerShare}%` }} /></div><small>Commercial cost sharing · not technical fault attribution</small></div>
@@ -607,12 +666,6 @@ function CompletionScreen({ decision, bmwShare, dealerShare, onWorkbench }: { de
       <div className="case-record"><span>Case record</span><strong><FolderOpen size={19} aria-hidden="true" />Customer Care Case</strong><b>{caseData.id}</b></div>
       <div className="screen-actions completion-actions"><span>Status: <b>Completed</b></span><button className="primary-button wide button-with-icon" onClick={onWorkbench}><ArrowLeft size={18} aria-hidden="true" />Back to Workbench</button></div>
     </section>
-  );
-}
-
-function ExecutionPanel({ timeline }: { timeline: { label: string; done: boolean; active: boolean }[] }) {
-  return (
-    <aside className="execution-panel"><h2>Customer Complaint &amp; Quality Handling Execution</h2><div className="timeline">{timeline.map((event) => <div className={`timeline-event ${event.done ? "done" : ""} ${event.active ? "active" : ""}`} key={event.label}><StatusMark complete={event.done} active={event.active} /><span>{event.label}</span></div>)}</div></aside>
   );
 }
 

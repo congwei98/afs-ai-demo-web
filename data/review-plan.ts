@@ -33,7 +33,7 @@ export const reviewPlanContext = {
 export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "warranty",
-    name: "Warranty",
+    name: "Warranty Agent",
     system: "BBS-A-4",
     role: "Data Agent",
     category: "warranty",
@@ -54,7 +54,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   },
   {
     id: "technical",
-    name: "Technical Service",
+    name: "Technical Service Agent",
     system: "C5-CN-A-6",
     role: "Data Agent",
     category: "technical",
@@ -81,7 +81,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   },
   {
     id: "knowledge",
-    name: "Previous Case Guidance",
+    name: "Case Knowledge Agent",
     system: "Enterprise Knowledge",
     role: "Knowledge Agent",
     category: "knowledge",
@@ -104,12 +104,12 @@ export const recommendedReviewAgents: ReviewAgent[] = [
 
 export const optionalReviewAgents: ReviewAgent[] = [
   {
-    id: "parts",
-    name: "Parts",
-    system: "BBS-A-3",
+    id: "data-custom",
+    name: "New Data Agent",
+    system: "BBS-A-3 Parts",
     role: "Data Agent",
     category: "parts",
-    purpose: "Check whether critical parts arrival exceeded 30 days",
+    purpose: "Configure an enterprise data query for this review",
     requirement: "Query BBS-A-3 for parts ordered against the related repair orders. Compare each order date with its actual dealer arrival date and flag any critical part that took more than 30 days to arrive.",
     resultSummary: "The replacement power-control module arrived after 36 days—6 days beyond the 30-day threshold.",
     decisionImpact: "Provides additional context on BMW parts-supply responsibility if this step is included in the plan.",

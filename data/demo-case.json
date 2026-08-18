@@ -24,21 +24,21 @@
       "findings": []
     },
     {
-      "name": "Warranty",
+      "name": "Warranty Agent",
       "system": "BBS-A-4",
       "role": "Data Agent",
       "task": "Confirm Three Guarantees eligibility",
       "findings": ["Coverage active", "Repeated repair attempts confirmed", "Three Guarantees criteria matched"]
     },
     {
-      "name": "Technical Service",
+      "name": "Technical Service Agent",
       "system": "C5-CN-A-6",
       "role": "Data Agent",
       "task": "Retrieve the TSARA Result and establish fault origin",
       "findings": ["Recurring power loss confirmed", "Product-related fault", "No dealer-induced damage"]
     },
     {
-      "name": "Previous Case Guidance",
+      "name": "Case Knowledge Agent",
       "system": "Enterprise Knowledge",
       "role": "Knowledge Agent",
       "task": "Review comparable compensation allocations",
