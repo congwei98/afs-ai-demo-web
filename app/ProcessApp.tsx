@@ -35,6 +35,7 @@ import {
   ShieldCheck,
   SquaresFour,
   Target,
+  Trash,
   UploadSimple,
   User,
   WarningCircle,
@@ -404,7 +405,7 @@ function AgentEvidence({ evidence }: { evidence: EvidenceBlock }) {
       {evidence.kind === "records" && <div className="evidence-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.record}><span>{row.date}</span><strong>{row.record}</strong><p>{row.finding}</p>{row.highlight && <b>Eligibility evidence</b>}</div>)}</div>}
       {evidence.kind === "diagnosis" && <div className="diagnosis-document">{evidence.documents.map((document) => <article key={document.title}><header><FileText size={18} /><strong>{document.title}</strong><span>{document.date}</span></header>{document.statements.map((statement) => <p className={statement.highlight ? "highlight" : ""} key={statement.text}>{statement.highlight && <CheckCircle size={16} weight="fill" />}{statement.text}</p>)}</article>)}</div>}
       {evidence.kind === "cases" && <div className="case-matches">{evidence.cases.map((item) => <article key={item.id}><div className="case-match-title"><strong>{item.id}</strong><span className={item.score >= 85 ? "high" : "medium"}>{item.score}% match</span></div><div className="match-dimensions"><span>{item.issue}</span><span>{item.request}</span><span className={item.score < 75 ? "difference" : ""}>{item.repairs}</span></div><p><b>Outcome:</b> {item.outcome}</p><small>{item.differences}</small></article>)}</div>}
-      {evidence.kind === "parts" && <div className="evidence-records parts-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.order}><span>{row.date}</span><strong>{row.part}</strong><p>{row.order} · {row.result}</p>{row.highlight && <b>Related repair</b>}</div>)}</div>}
+      {evidence.kind === "parts" && <div className="evidence-records parts-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.order}><span>{row.date}</span><strong>{row.part}</strong><p>{row.order} · {row.result}</p>{row.highlight && <b>Over 30 days</b>}</div>)}</div>}
       {evidence.kind === "ocr" && <div className="ocr-fields">{evidence.fields.map((field) => <div className={field.highlight ? "highlight" : ""} key={field.label}><span>{field.label}</span><strong>{field.value}</strong><small>{field.confidence} confidence</small></div>)}</div>}
     </section>
   );
@@ -456,6 +457,20 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
     setAddOpen(false);
   };
 
+  const removeAgent = (id: string) => {
+    setAgents((current) => current.filter((agent) => agent.id !== id));
+    setExpandedAgents((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    setEvidenceAgents((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  };
+
   const activeAgent = agents[runCursor];
   const runMessage = runCursor >= agents.length ? "All evidence received. Customer Care is consolidating the findings." : runPhase === "request" ? `Sending the review request to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is querying its business source…` : `${activeAgent?.name} is returning evidence to Customer Care…`;
 
@@ -471,9 +486,9 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 
       {(state === "running" || state === "results") && (
         <section className={`orchestration-map ${state}`} aria-label="Customer Care agent orchestration">
-          <div className="planner-node"><span><FlowArrow size={24} /></span><strong>Customer Care</strong><small>BBS-A-7 · Planner</small></div>
+          <div className="planner-node"><span><FlowArrow size={22} /></span><div><strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small></div></div>
           <div className={`request-lane ${state === "running" ? runPhase : "complete"}`}><span className="request-packet"><PaperPlaneTilt size={17} /></span><b>{state === "results" ? "Evidence consolidated" : runPhase === "return" ? "Evidence response" : "Business request"}</b></div>
-          <div className="orchestrated-agents">{agents.map((agent, index) => <div className={`${index < runCursor || state === "results" ? "done" : ""} ${index === runCursor && state === "running" ? "active" : ""}`} key={agent.id}><span><ReviewAgentIcon category={agent.category} size={18} /></span><strong>{agent.name}</strong><small>{index < runCursor || state === "results" ? "Evidence returned" : index === runCursor && state === "running" ? runPhase === "working" ? "Querying source" : runPhase === "return" ? "Returning result" : "Request received" : "Waiting"}</small></div>)}</div>
+          <div className="orchestrated-agents">{agents.map((agent, index) => <div className={`${index < runCursor || state === "results" ? "done" : ""} ${index === runCursor && state === "running" ? "active" : ""}`} key={agent.id}><span><ReviewAgentIcon category={agent.category} size={18} /></span><div><strong>{agent.name}</strong><em>{agent.role}</em><small>{index < runCursor || state === "results" ? "Evidence returned" : index === runCursor && state === "running" ? runPhase === "working" ? "Querying source" : runPhase === "return" ? "Returning result" : "Request received" : "Waiting"}</small></div></div>)}</div>
           <p role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "All selected agents returned evidence to Customer Care." : runMessage}</p>
         </section>
       )}
@@ -490,7 +505,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
           const active = state === "running" && index === runCursor;
           return (
             <article className={`review-agent-card ${active ? "active" : ""} ${completed ? "completed" : ""}`} key={agent.id}>
-              <button className="agent-card-header" onClick={() => toggleExpanded(agent.id)} aria-expanded={expanded}>
+              <div className="agent-card-top"><button className="agent-card-header" onClick={() => toggleExpanded(agent.id)} aria-expanded={expanded}>
                 <span className="step-number">{completed ? <Check size={16} weight="bold" /> : index + 1}</span>
                 <span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span>
                 <span className="agent-card-title"><strong>{agent.name} <small>{agent.system}</small></strong><span>{agent.purpose}</span></span>
@@ -498,7 +513,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 {agent.addedBy && <span className="human-added">Added by human</span>}
                 <span className={`card-status ${active ? "active" : completed ? "done" : ""}`}>{active ? runPhase === "working" ? "Querying" : runPhase === "return" ? "Returning" : "Requested" : completed ? "Completed" : "Ready"}</span>
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
-              </button>
+              </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
               {expanded && <div className="agent-card-body"><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} disabled={state !== "plan"} onChange={(event) => updateRequirement(agent.id, event.target.value)} /></label>{state === "results" && <div className="agent-result"><CheckCircle size={19} weight="fill" /><p><span>Result</span><strong>{agent.resultSummary}</strong></p><button onClick={() => toggleEvidence(agent.id)}><Eye size={16} />{evidenceOpen ? "Hide Evidence" : "View Evidence"}</button></div>}{evidenceOpen && <AgentEvidence evidence={agent.evidence} />}</div>}
             </article>
           );
