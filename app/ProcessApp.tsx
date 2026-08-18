@@ -21,6 +21,7 @@ import {
   FlowArrow,
   FolderOpen,
   LockKeyOpen,
+  MagicWand,
   Microphone,
   Paperclip,
   Pause,
@@ -33,12 +34,14 @@ import {
   UploadSimple,
   User,
   WarningCircle,
+  Waveform,
   Wrench,
   X,
   Clock,
 } from "@phosphor-icons/react";
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
+import { intakeDemo, type ConversationLine } from "@/data/intake-demo";
 
 type ReviewState = "plan" | "running" | "results";
 type Drawer = "records" | "cases" | null;
@@ -48,6 +51,26 @@ const steps = ["Intake", "Review", "Recommendation", "Confirmation", "Execution"
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
   return <span className="role-badge">{children}</span>;
+}
+
+function rawLineText(line: ConversationLine) {
+  return line.parts.map((part) => part.correction ? `${part.correction.before}${part.text}` : part.text).join("");
+}
+
+function StreamedLine({ line, visibleCharacters, corrected }: { line: ConversationLine; visibleCharacters: number; corrected: boolean }) {
+  return <>{line.parts.map((part, index) => {
+    const consumedCharacters = line.parts.slice(0, index).reduce((total, previousPart) => total + (previousPart.correction ? previousPart.correction.before.length + previousPart.text.length : previousPart.text.length), 0);
+    const availableCharacters = Math.max(0, visibleCharacters - consumedCharacters);
+    if (availableCharacters <= 0) return null;
+    if (part.correction) {
+      if (corrected) return <span className="self-correction" data-before={part.correction.before} key={index}>{part.correction.after}{part.text}</span>;
+      const wrong = part.correction.before.slice(0, availableCharacters);
+      const trailing = part.text.slice(0, Math.max(availableCharacters - part.correction.before.length, 0));
+      return <span key={index}><span className="correction-error">{wrong}</span>{trailing}</span>;
+    }
+    const visibleText = part.text.slice(0, availableCharacters);
+    return part.semantic ? <mark className={`${part.semantic}-mark`} key={index}>{visibleText}</mark> : <span key={index}>{visibleText}</span>;
+  })}</>;
 }
 
 function CompletionActionIcon({ index }: { index: number }) {
@@ -229,28 +252,132 @@ function CaseIdentity() {
 }
 
 function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { source: ComplaintSource; setSource: (value: ComplaintSource) => void; playing: boolean; setPlaying: (value: boolean) => void; onNext: () => void }) {
+  const [activeLine, setActiveLine] = useState(0);
+  const [visibleCharacters, setVisibleCharacters] = useState(0);
+  const [correctedLines, setCorrectedLines] = useState<Set<string>>(new Set());
+  const [complete, setComplete] = useState(false);
+  const [focusedEvidence, setFocusedEvidence] = useState<string | null>(null);
+  const conversation = intakeDemo.conversation;
+  const currentLine = conversation[activeLine];
+  const currentRawText = currentLine ? rawLineText(currentLine) : "";
+  const totalCharacters = conversation.reduce((total, line) => total + rawLineText(line).length, 0);
+  const priorCharacters = conversation.slice(0, activeLine).reduce((total, line) => total + rawLineText(line).length, 0);
+  const progress = complete ? 100 : Math.min(99, ((priorCharacters + visibleCharacters) / totalCharacters) * 100);
+  const hasStarted = activeLine > 0 || visibleCharacters > 0 || complete;
+  const revealedCount = complete ? conversation.length : hasStarted ? activeLine + 1 : 0;
+  const issueDetected = complete || activeLine > 1 || (activeLine === 1 && visibleCharacters >= 20);
+  const repairDetected = complete || activeLine > 1 || (activeLine === 1 && correctedLines.has("issue"));
+  const emotionDetected = complete || activeLine > 3 || (activeLine === 3 && visibleCharacters >= 22);
+  const requestDetected = complete || activeLine > 5 || (activeLine === 5 && visibleCharacters >= 28);
+  const signalCount = [issueDetected, repairDetected, emotionDetected, requestDetected].filter(Boolean).length;
+
+  useEffect(() => {
+    if (!playing || source !== "call") return;
+    if (visibleCharacters < currentRawText.length) {
+      const previousCharacter = currentRawText.charAt(Math.max(0, visibleCharacters - 1));
+      const delay = /[,.?!—]/.test(previousCharacter) ? 260 : 62;
+      const timer = window.setTimeout(() => setVisibleCharacters((count) => count + 1), delay);
+      return () => window.clearTimeout(timer);
+    }
+
+    const hasCorrection = currentLine.parts.some((part) => part.correction);
+    if (hasCorrection && !correctedLines.has(currentLine.id)) {
+      const timer = window.setTimeout(() => setCorrectedLines((lines) => new Set(lines).add(currentLine.id)), 1150);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (activeLine < conversation.length - 1) {
+      const timer = window.setTimeout(() => {
+        setActiveLine((line) => line + 1);
+        setVisibleCharacters(0);
+      }, 720);
+      return () => window.clearTimeout(timer);
+    }
+
+    const timer = window.setTimeout(() => {
+      setComplete(true);
+      setPlaying(false);
+    }, 850);
+    return () => window.clearTimeout(timer);
+  }, [activeLine, conversation.length, correctedLines, currentLine, currentRawText, playing, setPlaying, source, visibleCharacters]);
+
+  const toggleAnalysis = () => {
+    setFocusedEvidence(null);
+    if (complete) {
+      setActiveLine(0);
+      setVisibleCharacters(0);
+      setCorrectedLines(new Set());
+      setComplete(false);
+    }
+    setPlaying(!playing);
+  };
+
+  const showEvidence = (id: string) => {
+    setFocusedEvidence(id);
+    document.getElementById(`transcript-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setFocusedEvidence(null), 2200);
+  };
+
   return (
-    <section className="screen-panel">
-      <div className="screen-heading"><div><p className="section-kicker">ORIGINAL COMPLAINT</p><h2>Complaint Intake</h2></div><span className="priority high">High</span></div>
+    <section className="screen-panel intake-screen">
+      <div className="screen-heading"><div><p className="section-kicker">ORIGINAL COMPLAINT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
       </div>
       {source === "call" ? (
-        <div className="complaint-card">
-          <div className="audio-row"><div className="recording-icon" aria-hidden="true"><Microphone size={23} /></div><button className="audio-button" aria-label={playing ? "Pause call recording" : "Play call recording"} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={22} weight="fill" /> : <Play size={22} weight="fill" />}</button><div><strong>Customer Call · {caseData.complaint.callDuration}</strong><div className={`waveform ${playing ? "playing" : ""}`} aria-hidden="true">▂▅▃▆▂▇▃▅▂▆▃▇▂▅▃▆▂</div></div></div>
-          <div className="transcript"><span>Transcript excerpt</span><p>{caseData.complaint.transcript}</p></div>
+        <div className="intake-workspace">
+          <div className="call-stage">
+            <div className="audio-console">
+              <div className={`recording-icon ${playing ? "live" : ""}`} aria-hidden="true"><Microphone size={22} /></div>
+              <button className="audio-button" aria-label={playing ? "Pause call analysis" : "Play and analyze call"} onClick={toggleAnalysis}>{playing ? <Pause size={21} weight="fill" /> : <Play size={21} weight="fill" />}</button>
+              <div className="audio-track">
+                <div className="audio-meta"><strong>Customer Call</strong><span>{complete ? caseData.complaint.callDuration : hasStarted ? currentLine.time : "00:00"}</span></div>
+                <div className={`wave-bars ${playing ? "playing" : ""}`} aria-hidden="true">{Array.from({ length: 38 }, (_, index) => <i key={index} style={{ height: `${8 + ((index * 11) % 25)}px` }} />)}</div>
+                <div className="audio-progress"><span style={{ width: `${Math.max(4, progress)}%` }} /></div>
+              </div>
+              <button className="analyze-button" onClick={toggleAnalysis}>{playing ? "Pause" : complete ? "Replay analysis" : "Play & analyze"}</button>
+            </div>
+
+            <div className="live-transcript" aria-busy={playing}>
+              <div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Live transcript</strong></div><div className="semantic-legend"><span className="quality-dot">Quality issue</span><span className="request-dot">Request</span><span className="emotion-dot">Emotion</span></div></div>
+              {!hasStarted && <div className="transcript-empty"><Microphone size={30} /><strong>Play the recording to see AI at work</strong><span>The conversation will be transcribed, corrected and structured in real time.</span></div>}
+              <div className="conversation-stream">
+                {conversation.slice(0, revealedCount).map((line, index) => (
+                  <article id={`transcript-${line.id}`} className={`utterance ${line.speaker === "Customer" ? "customer" : "agent"} ${focusedEvidence === line.id ? "evidence-focus" : ""}`} key={line.id}>
+                    <div className="speaker-line"><strong>{line.speaker}</strong><span>{line.time}</span>{index === activeLine && playing && <i>transcribing</i>}</div>
+                    <p><StreamedLine line={line} visibleCharacters={index < activeLine || complete ? Number.POSITIVE_INFINITY : visibleCharacters} corrected={correctedLines.has(line.id)} />{index === activeLine && playing && visibleCharacters < currentRawText.length && <span className="stream-caret" aria-hidden="true" />}</p>
+                    {line.id === "issue" && correctedLines.has("issue") && <div className="correction-note"><MagicWand size={14} />AI resolved self-correction: 2 visits → 3 visits</div>}
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <aside className="ai-extraction" aria-label="AI extracted information">
+            <div className="extraction-heading"><span><MagicWand size={18} />AI understanding</span><small>{complete ? "4 fields confirmed" : `${signalCount} signals found`}</small></div>
+            <div className={`signal-card quality ${issueDetected ? "revealed" : ""}`}><WarningCircle size={21} /><div><span>Quality issue</span><strong>{issueDetected ? "Recurring loss of power" : "Listening…"}</strong></div></div>
+            <div className={`signal-card context ${repairDetected ? "revealed" : ""}`}><Wrench size={21} /><div><span>Repair history</span><strong>{repairDetected ? "3 visits · issue recurring" : "Listening…"}</strong></div></div>
+            <div className={`signal-card emotion ${emotionDetected ? "revealed" : ""}`}><ChatText size={21} /><div><span>Customer sentiment</span><strong>{emotionDetected ? "Frustrated · safety concern" : "Listening…"}</strong></div></div>
+            <div className={`signal-card request ${requestDetected ? "revealed" : ""}`}><ClipboardText size={21} /><div><span>Requested resolution</span><strong>{requestDetected ? "Vehicle return" : "Listening…"}</strong></div></div>
+            {playing && <div className="ai-working"><span /><p><strong>AI is organizing the conversation</strong>Speaker separation, correction and intent detection</p></div>}
+          </aside>
+
+          {complete && (
+            <section className="call-summary">
+              <div className="summary-title"><span><CheckCircle size={22} weight="fill" /></span><div><p>AI-GENERATED CALL SUMMARY</p><h3>Complaint ready for review</h3></div><small>Generated from 03:42 recording</small></div>
+              <div className="consolidated-statement"><MagicWand size={19} /><p><strong>Customer statement, organized by AI</strong>{intakeDemo.consolidatedStatement}</p></div>
+              <div className="summary-grid">
+                {intakeDemo.summary.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><button onClick={() => showEvidence(item.evidenceId)}><Eye size={15} />Evidence · {item.evidenceTime}</button></div>)}
+              </div>
+            </section>
+          )}
         </div>
       ) : (
         <div className="complaint-card scan-card"><div className="scan-preview"><FileText size={34} aria-hidden="true" /><span>SCANNED</span><strong>{caseData.complaint.scanReference}</strong></div><div><span className="field-label">Source</span><h3>{caseData.complaint.scanSource}</h3><p>{caseData.complaint.scanSummary}</p></div></div>
       )}
-      <h3 className="subheading">Extracted Information</h3>
-      <div className="extracted-grid">
-        <article className="extracted-item issue"><div className="extracted-icon"><WarningCircle size={25} weight="regular" aria-hidden="true" /></div><div><span>Issue</span><strong>{caseData.issue}</strong></div></article>
-        <article className="extracted-item request"><div className="extracted-icon"><ClipboardText size={25} weight="regular" aria-hidden="true" /></div><div><span>Request</span><strong>{caseData.request}</strong></div></article>
-        <article className="extracted-item priority-item"><div className="extracted-icon"><Flag size={25} weight="regular" aria-hidden="true" /></div><div><span>Priority</span><strong>{caseData.priority}</strong></div></article>
-      </div>
-      <div className="screen-actions"><button className="primary-button wide button-with-icon" onClick={onNext}>Start Review<ArrowRight size={18} aria-hidden="true" /></button></div>
+      {source === "scan" && <><h3 className="subheading">Extracted Information</h3><div className="extracted-grid"><article className="extracted-item issue"><div className="extracted-icon"><WarningCircle size={25} aria-hidden="true" /></div><div><span>Issue</span><strong>{caseData.issue}</strong></div></article><article className="extracted-item request"><div className="extracted-icon"><ClipboardText size={25} aria-hidden="true" /></div><div><span>Request</span><strong>{caseData.request}</strong></div></article><article className="extracted-item priority-item"><div className="extracted-icon"><Flag size={25} aria-hidden="true" /></div><div><span>Priority</span><strong>{caseData.priority}</strong></div></article></div></>}
+      <div className="screen-actions"><span className="intake-action-hint">{source === "call" && !complete ? "Analyze the recording to continue" : "Complaint information is ready"}</span><button className="primary-button wide button-with-icon" onClick={onNext} disabled={source === "call" && !complete}>Start Review<ArrowRight size={18} aria-hidden="true" /></button></div>
     </section>
   );
 }
