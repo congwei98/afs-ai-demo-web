@@ -4,19 +4,21 @@ An interactive, frontend-only demo for the **Customer Complaints & Quality Handl
 
 ## Run locally
 
-Prerequisite: Node.js 22.13 or newer.
+Prerequisite: Node.js 20.9 or newer. The same commands work in Windows
+PowerShell, Windows Command Prompt, macOS and Linux.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-For a production build:
+For a production build and local production server:
 
 ```bash
 npm run build
+npm run start
 ```
 
 ## Demo click path
@@ -51,7 +53,7 @@ The JSON files can be edited in any text editor. Keep the existing property name
 ## Technology choice
 
 - React 19 + TypeScript for typed, reusable interactive components.
-- vinext/Vite for fast local startup and production builds.
+- Next.js 16 for cross-platform local startup and production builds.
 - Phosphor Icons for a consistent, accessible outline icon system.
 - Plain CSS design tokens for easy visual adjustment without a UI framework.
 - Static JSON imports for transparent, version-controlled mock data.

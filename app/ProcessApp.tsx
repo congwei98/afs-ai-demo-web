@@ -301,7 +301,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
   const [selectedCallId, setSelectedCallId] = useState<string>("current");
   const [historyPlayingId, setHistoryPlayingId] = useState<string | null>(null);
   const [historyProgress, setHistoryProgress] = useState(0);
-  const conversation = intakeDemo.conversation;
+  const conversation: ConversationLine[] = intakeDemo.conversation;
   const selectedHistoricalCall = historicalCalls.find((call) => call.id === selectedCallId);
   const currentLine = conversation[activeLine];
   const currentRawText = currentLine ? rawLineText(currentLine) : "";

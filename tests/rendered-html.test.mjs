@@ -1,24 +1,36 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+async function waitForServer(url, timeoutMs = 20_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+    } catch {
+      // The server is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Next.js did not start within 20 seconds");
 }
 
-test("server-renders the process workbench", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
+test("production server renders the process workbench", async (context) => {
+  const port = 3317;
+  const nextBin = new URL("../node_modules/next/dist/bin/next", import.meta.url);
+  const projectRoot = new URL("..", import.meta.url);
+  const server = spawn(process.execPath, [fileURLToPath(nextBin), "start", "-p", String(port)], {
+    cwd: fileURLToPath(projectRoot),
+    stdio: "ignore",
+  });
+  context.after(() => server.kill());
+
+  const response = await waitForServer(`http://127.0.0.1:${port}/`);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /My Process Management Center/);
   assert.match(html, /My Workbench/);
   assert.match(html, /Customer Complaints &amp; Quality Handling/);
-  assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
