@@ -14,35 +14,35 @@
     "scanReference": "MRA-2026-0512-0188",
     "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal vehicle-return request."
   },
-  "objective": "Determine whether the case qualifies for a Three Guarantees vehicle return.",
+  "objective": "Determine Three Guarantees applicability and the compensation allocation between BMW and the dealer.",
   "agents": [
     {
       "name": "Customer Care",
       "system": "BBS-A-7",
       "role": "Planner",
-      "task": "Plan the review, coordinate work and consolidate the recommendation",
+      "task": "Plan the review, coordinate work and consolidate the applicability and compensation recommendation",
       "findings": []
     },
     {
       "name": "Warranty",
       "system": "BBS-A-4",
       "role": "Data Agent",
-      "task": "Confirm Three Guarantees return eligibility",
-      "findings": ["Coverage active", "Repeated repair attempts confirmed", "Return criteria matched"]
+      "task": "Confirm Three Guarantees eligibility",
+      "findings": ["Coverage active", "Repeated repair attempts confirmed", "Three Guarantees criteria matched"]
     },
     {
       "name": "Technical Service",
       "system": "C5-CN-A-6",
       "role": "Data Agent",
-      "task": "Assess the recurring power-loss issue",
-      "findings": ["Recurring power loss confirmed", "Root cause remains unresolved", "Further repair not recommended"]
+      "task": "Retrieve the TSARA Result and establish fault origin",
+      "findings": ["Recurring power loss confirmed", "Product-related fault", "No dealer-induced damage"]
     },
     {
       "name": "Previous Case Guidance",
       "system": "Enterprise Knowledge",
       "role": "Knowledge Agent",
-      "task": "Review comparable handling outcomes",
-      "findings": ["3 comparable cases found", "Vehicle-return route consistently applied"]
+      "task": "Review comparable compensation allocations",
+      "findings": ["3 comparable cases found", "Comparable cases support BMW 20% / Dealer 80%"]
     }
   ],
   "access": {
@@ -58,16 +58,16 @@
     { "date": "2025-10-18", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty (BBS-A-4)" },
     { "date": "2025-12-02", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty (BBS-A-4)" },
     { "date": "2026-02-11", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty (BBS-A-4)" },
-    { "date": "2026-05-20", "record": "Technical Assessment", "finding": "Recurring fault confirmed", "source": "Technical Service (C5-CN-A-6)" }
+    { "date": "2026-05-20", "record": "TSARA Result TS-2026-117", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical Service (C5-CN-A-6)" }
   ],
   "previousCases": [
-    { "caseId": "CC-2025-1123", "issue": "Recurring power loss", "handling": "Vehicle return process", "outcome": "Completed" },
-    { "caseId": "CC-2025-0876", "issue": "Repeated high-voltage shutdown", "handling": "Vehicle return process", "outcome": "Completed" },
-    { "caseId": "CC-2025-0542", "issue": "Major fault after multiple repairs", "handling": "Vehicle return process", "outcome": "Completed" }
+    { "caseId": "CC-2025-1123", "issue": "Recurring power loss", "handling": "Three Guarantees applicable", "outcome": "BMW 20% / Dealer 80%" },
+    { "caseId": "CC-2025-0876", "issue": "Repeated high-voltage shutdown", "handling": "Three Guarantees applicable", "outcome": "BMW 20% / Dealer 80%" },
+    { "caseId": "CC-2025-0542", "issue": "Major fault after one repair", "handling": "Not covered", "outcome": "Case closed" }
   ],
   "recommendation": {
-    "title": "Start Three Guarantees Vehicle Return",
-    "reasons": ["Warranty return criteria matched", "Recurring fault confirmed", "Previous case handling is consistent"]
+    "title": "Three Guarantees Applicable · BMW 20% / Dealer 80%",
+    "reasons": ["Repeated-repair criteria matched", "TSARA confirms a product-related fault", "Comparable cases support the proposed compensation allocation"]
   },
   "completionActions": ["Customer Care case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
 }

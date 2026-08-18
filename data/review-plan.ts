@@ -14,14 +14,15 @@ export type ReviewAgent = {
   purpose: string;
   requirement: string;
   resultSummary: string;
+  decisionImpact: string;
   evidence: EvidenceBlock;
   addedBy?: "Human";
 };
 
 export const reviewPlanContext = {
-  objective: "Determine whether this complaint qualifies for a Three Guarantees vehicle return.",
+  objective: "Determine Three Guarantees applicability and recommend the compensation allocation between BMW and the dealer.",
   recommendation:
-    "Verify repeated-repair eligibility, confirm that the unresolved fault is product-related, then compare similar return decisions before recommending an outcome.",
+    "Verify Three Guarantees eligibility, establish the technical fault origin, then benchmark comparable cases to recommend the commercial compensation shares between BMW and the dealer.",
   evidence: [
     { label: "Complaint", value: "Recurring loss of power" },
     { label: "Repair history", value: "Customer stated 3 visits" },
@@ -39,6 +40,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     purpose: "Verify repair frequency and Three Guarantees eligibility",
     requirement: "Retrieve all repair orders and warranty claims for this VIN. Confirm how many times the same loss-of-power issue was repaired and whether the return threshold is met.",
     resultSummary: "Three repair visits for the same issue were confirmed; the repeated-repair threshold is met.",
+    decisionImpact: "Supports the conclusion that the case is covered by the Three Guarantees repeated-repair provision.",
     evidence: {
       kind: "records",
       title: "Warranty & repair records",
@@ -56,16 +58,17 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "C5-CN-A-6",
     role: "Data Agent",
     category: "technical",
-    purpose: "Confirm fault origin and whether further repair is viable",
-    requirement: "Retrieve the latest diagnostic report and technical escalation. Identify whether the fault is product-related, remains unresolved, and was not introduced by dealer repair work.",
-    resultSummary: "The fault is product-related, unresolved with the current repair method, and not caused by dealer workmanship.",
+    purpose: "Use the TSARA Result to determine responsibility allocation",
+    requirement: "Retrieve the latest TSARA Result. Identify whether the fault is product-related, remains unresolved, and was not introduced by dealer repair work so responsibility can be allocated between BMW and the dealer.",
+    resultSummary: "The TSARA Result attributes the unresolved fault to the product and finds no dealer-induced damage.",
+    decisionImpact: "Confirms the product-origin basis for Three Guarantees handling. The commercial BMW/dealer compensation split is determined separately from technical fault attribution.",
     evidence: {
       kind: "diagnosis",
-      title: "Technical diagnosis",
-      summary: "Two decisive statements matched the eligibility criteria.",
+      title: "TSARA Result",
+      summary: "Two decisive TSARA findings establish product responsibility and exclude dealer workmanship.",
       documents: [
         {
-          title: "Technical Escalation TE-2026-117",
+          title: "TSARA Result TS-2026-117",
           date: "20 May 2026",
           statements: [
             { text: "Intermittent power-control failure reproduced during road test." },
@@ -82,17 +85,18 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "Enterprise Knowledge",
     role: "Knowledge Agent",
     category: "knowledge",
-    purpose: "Compare prior decisions and explain case relevance",
-    requirement: "Find previous cases involving recurring product faults and vehicle-return requests. Rank relevance using issue type, customer request and repair count; explain both matches and differences.",
-    resultSummary: "Two highly relevant return cases and one partially relevant case were found.",
+    purpose: "Benchmark BMW and dealer compensation allocations",
+    requirement: "Find previous Three Guarantees cases involving recurring product faults and vehicle-return requests. Rank relevance using fault origin, customer request and repair count; compare the BMW/dealer compensation allocation in each case.",
+    resultSummary: "Highly comparable cases use a BMW 20% / Dealer 80% commercial compensation allocation.",
+    decisionImpact: "Supports 20% BMW and 80% dealer as the recommended commercial allocation for this Three Guarantees case.",
     evidence: {
       kind: "cases",
       title: "Comparable case analysis",
       summary: "Cases are ranked by product issue, customer request and repair-history similarity.",
       cases: [
-        { id: "CC-2025-1123", score: 96, issue: "Recurring power loss · close match", request: "Vehicle return · exact match", repairs: "3 repairs · exact match", outcome: "Vehicle return completed", differences: "Same fault pattern and request; no material difference." },
-        { id: "CC-2025-0876", score: 88, issue: "High-voltage shutdown · close match", request: "Vehicle return · exact match", repairs: "4 repairs · close match", outcome: "Vehicle return completed", differences: "One additional repair attempt before approval." },
-        { id: "CC-2025-0542", score: 67, issue: "Product control-unit fault · related", request: "Vehicle return · exact match", repairs: "1 repair · low match", outcome: "Further repair offered", differences: "Repair count was below the repeated-repair threshold." },
+        { id: "CC-2025-1123", score: 96, issue: "Recurring power loss · close match", request: "Vehicle return · exact match", repairs: "3 repairs · exact match", outcome: "Applicable · BMW 20% / Dealer 80%", differences: "Same fault origin, repair count and customer request." },
+        { id: "CC-2025-0876", score: 88, issue: "High-voltage shutdown · close match", request: "Vehicle return · exact match", repairs: "4 repairs · close match", outcome: "Applicable · BMW 20% / Dealer 80%", differences: "One additional repair attempt; commercial allocation is the same." },
+        { id: "CC-2025-0542", score: 67, issue: "Product control-unit fault · related", request: "Vehicle return · exact match", repairs: "1 repair · low match", outcome: "Not covered · case closed", differences: "Repair count was below the Three Guarantees threshold." },
       ],
     },
   },
@@ -108,6 +112,7 @@ export const optionalReviewAgents: ReviewAgent[] = [
     purpose: "Check whether critical parts arrival exceeded 30 days",
     requirement: "Query BBS-A-3 for parts ordered against the related repair orders. Compare each order date with its actual dealer arrival date and flag any critical part that took more than 30 days to arrive.",
     resultSummary: "The replacement power-control module arrived after 36 days—6 days beyond the 30-day threshold.",
+    decisionImpact: "Provides additional context on BMW parts-supply responsibility if this step is included in the plan.",
     evidence: {
       kind: "parts",
       title: "Parts delivery timeline",
@@ -128,6 +133,7 @@ export const optionalReviewAgents: ReviewAgent[] = [
     purpose: "Validate the scanned complaint against the call record",
     requirement: "Read the regulator complaint scan. Extract the claimant, vehicle, reported issue and requested resolution, then compare them with the call transcript.",
     resultSummary: "The scanned complaint matches the customer, vehicle, issue and return request in the call.",
+    decisionImpact: "Confirms that the written complaint supports the same issue and requested resolution used in the recommendation.",
     evidence: {
       kind: "ocr",
       title: "Scanned complaint verification",
@@ -142,3 +148,15 @@ export const optionalReviewAgents: ReviewAgent[] = [
     addedBy: "Human",
   },
 ];
+
+export const settlementRecommendation = {
+  applicability: "Applicable",
+  bmwShare: 20,
+  dealerShare: 80,
+  summary: "Three Guarantees applies. The TSARA Result confirms a product-origin fault; comparable cases support a commercial compensation allocation of 20% BMW and 80% dealer.",
+  conclusions: [
+    { id: "coverage", label: "Three Guarantees", value: "Applicable", agentId: "warranty", rationale: "Three repairs for the same unresolved fault meet the repeated-repair threshold." },
+    { id: "origin", label: "Technical fault origin", value: "Product-related", agentId: "technical", rationale: "The TSARA Result identifies a product-origin fault and excludes dealer-induced damage." },
+    { id: "allocation", label: "Recommended compensation", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "Highly comparable Three Guarantees cases consistently use a 20% BMW / 80% dealer commercial allocation." },
+  ],
+};

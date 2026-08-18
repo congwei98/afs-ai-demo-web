@@ -47,13 +47,13 @@ import {
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
 import { intakeDemo, type ConversationLine } from "@/data/intake-demo";
-import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, type EvidenceBlock, type ReviewAgent } from "@/data/review-plan";
+import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type EvidenceBlock, type ReviewAgent } from "@/data/review-plan";
 
 type ReviewState = "plan" | "running" | "results";
-type Drawer = "records" | "cases" | null;
 type ComplaintSource = "call" | "scan";
+type CaseDecision = "allocation" | "not-covered";
 
-const steps = ["Intake", "Review", "Recommendation", "Confirmation", "Execution"];
+const steps = ["Intake", "Review", "Recommendation", "Decision", "Execution"];
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
   return <span className="role-badge">{children}</span>;
@@ -94,11 +94,14 @@ export default function ProcessApp() {
   const [reviewState, setReviewState] = useState<ReviewState>("plan");
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
-  const [drawer, setDrawer] = useState<Drawer>(null);
+  const [recommendationEvidence, setRecommendationEvidence] = useState<string | null>(null);
   const [source, setSource] = useState<ComplaintSource>("call");
   const [playing, setPlaying] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [caseCompleted, setCaseCompleted] = useState(false);
+  const [caseDecision, setCaseDecision] = useState<CaseDecision>("allocation");
+  const [bmwShare, setBmwShare] = useState(settlementRecommendation.bmwShare);
+  const [dealerShare, setDealerShare] = useState(settlementRecommendation.dealerShare);
   const [plannedAgents, setPlannedAgents] = useState<ReviewAgent[]>(() => recommendedReviewAgents.map((agent) => ({ ...agent })));
 
   const openCase = () => {
@@ -109,6 +112,9 @@ export default function ProcessApp() {
     setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
     setConfirmed(false);
     setCaseCompleted(false);
+    setCaseDecision("allocation");
+    setBmwShare(settlementRecommendation.bmwShare);
+    setDealerShare(settlementRecommendation.dealerShare);
   };
 
   const backToWorkbench = () => {
@@ -164,14 +170,14 @@ export default function ProcessApp() {
               onNext={() => setStage(3)}
             />
           )}
-          {stage === 3 && <RecommendationScreen onRecords={() => setDrawer("records")} onCases={() => setDrawer("cases")} onNext={() => setStage(4)} />}
-          {stage === 4 && <ConfirmationScreen confirmed={confirmed} setConfirmed={setConfirmed} onBack={() => setStage(3)} onConfirm={completeCase} />}
-          {stage === 5 && <CompletionScreen onWorkbench={backToWorkbench} />}
+          {stage === 3 && <RecommendationScreen agents={plannedAgents} onEvidence={setRecommendationEvidence} onNext={() => setStage(4)} />}
+          {stage === 4 && <ConfirmationScreen decision={caseDecision} setDecision={setCaseDecision} bmwShare={bmwShare} setBmwShare={setBmwShare} dealerShare={dealerShare} setDealerShare={setDealerShare} confirmed={confirmed} setConfirmed={setConfirmed} onBack={() => setStage(3)} onConfirm={completeCase} />}
+          {stage === 5 && <CompletionScreen decision={caseDecision} bmwShare={bmwShare} dealerShare={dealerShare} onWorkbench={backToWorkbench} />}
         </div>
         <ExecutionPanel timeline={timeline} />
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
-      {drawer && <EvidenceDrawer type={drawer} onClose={() => setDrawer(null)} />}
+      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} onClose={() => setRecommendationEvidence(null)} />}
     </main>
   );
 }
@@ -525,38 +531,57 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
   );
 }
 
-function RecommendationScreen({ onRecords, onCases, onNext }: { onRecords: () => void; onCases: () => void; onNext: () => void }) {
+function RecommendationScreen({ agents, onEvidence, onNext }: { agents: ReviewAgent[]; onEvidence: (agentId: string) => void; onNext: () => void }) {
   return (
     <section className="screen-panel recommendation-screen">
-      <div className="screen-heading"><div><p className="section-kicker">RECOMMENDATION</p><h2>Recommended Resolution</h2></div></div>
-      <div className="recommendation-card"><span className="large-check"><Check size={42} weight="bold" aria-hidden="true" /></span><div><h3>{caseData.recommendation.title}</h3>{caseData.recommendation.reasons.map((reason) => <p key={reason}><span><Check size={13} weight="bold" aria-hidden="true" /></span>{reason}</p>)}</div></div>
+      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE RECOMMENDATION</p><h2>Compensation Recommendation</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on 3 Agent results</span></div>
+      <section className="settlement-overview">
+        <div className="coverage-result"><span>THREE GUARANTEES ASSESSMENT</span><strong><CheckCircle size={20} weight="fill" />Applicable</strong></div>
+        <div className="allocation-result"><span>RECOMMENDED COMMERCIAL COMPENSATION</span><div><strong>BMW <b>{settlementRecommendation.bmwShare}%</b></strong><strong>Dealer <b>{settlementRecommendation.dealerShare}%</b></strong></div><div className="allocation-bar" aria-label={`BMW ${settlementRecommendation.bmwShare} percent, Dealer ${settlementRecommendation.dealerShare} percent`}><span style={{ width: `${settlementRecommendation.bmwShare}%` }} /><i style={{ width: `${settlementRecommendation.dealerShare}%` }} /></div><small>Commercial cost sharing · not technical fault attribution</small></div>
+        <p>{settlementRecommendation.summary}</p>
+      </section>
+      <div className="recommendation-conclusions">
+        {settlementRecommendation.conclusions.map((conclusion) => {
+          const agent = agents.find((item) => item.id === conclusion.agentId) ?? recommendedReviewAgents.find((item) => item.id === conclusion.agentId)!;
+          return <article key={conclusion.id}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><div><small>{conclusion.label}</small><strong>{conclusion.value}</strong><p>{conclusion.rationale}</p></div><button onClick={() => onEvidence(agent.id)}><Eye size={16} /><span>View Agent Evidence</span><small>{agent.name} · {agent.system}</small><CaretRight size={16} /></button></article>;
+        })}
+      </div>
       <div className="prepared-by"><User size={19} aria-hidden="true" /><span>Prepared by Customer Care (BBS-A-7)</span><RoleBadge>Planner</RoleBadge></div>
-      <div className="evidence-links"><button onClick={onRecords}><Database size={24} aria-hidden="true" /><strong>Data Agent evidence</strong><span>Warranty and technical records <CaretRight size={14} aria-hidden="true" /></span></button><button onClick={onCases}><Books size={24} aria-hidden="true" /><strong>Knowledge Agent guidance</strong><span>3 comparable cases <CaretRight size={14} aria-hidden="true" /></span></button></div>
-      <div className="next-step"><strong>Next step</strong><p>Human confirmation is required before the case is completed.</p></div>
-      <div className="screen-actions"><button className="primary-button wide button-with-icon" onClick={onNext}>Continue to Confirmation<ArrowRight size={18} aria-hidden="true" /></button></div>
+      <div className="next-step"><strong>Human decision required</strong><p>Confirm or adjust the compensation shares, or determine that the case is not covered and notify the dealer.</p></div>
+      <div className="screen-actions"><button className="primary-button wide button-with-icon" onClick={onNext}>Review Human Decision<ArrowRight size={18} aria-hidden="true" /></button></div>
     </section>
   );
 }
 
-function ConfirmationScreen({ confirmed, setConfirmed, onBack, onConfirm }: { confirmed: boolean; setConfirmed: (value: boolean) => void; onBack: () => void; onConfirm: () => void }) {
+function ConfirmationScreen({ decision, setDecision, bmwShare, setBmwShare, dealerShare, setDealerShare, confirmed, setConfirmed, onBack, onConfirm }: { decision: CaseDecision; setDecision: (decision: CaseDecision) => void; bmwShare: number; setBmwShare: (value: number) => void; dealerShare: number; setDealerShare: (value: number) => void; confirmed: boolean; setConfirmed: (value: boolean) => void; onBack: () => void; onConfirm: () => void }) {
+  const allocationValid = bmwShare >= 0 && dealerShare >= 0 && bmwShare + dealerShare === 100;
+  const chooseDecision = (next: CaseDecision) => {
+    setDecision(next);
+    setConfirmed(false);
+  };
   return (
-    <section className="screen-panel">
-      <div className="screen-heading"><div><p className="section-kicker">HUMAN DECISION</p><h2>Confirm Vehicle Return</h2></div></div>
-      <div className="summary-table"><div><strong><ClipboardText size={19} aria-hidden="true" />Customer request</strong><span>{caseData.request}</span></div><div><strong><CheckCircle size={19} aria-hidden="true" />Recommendation</strong><span>{caseData.recommendation.title}</span></div><div><strong><ShieldCheck size={19} aria-hidden="true" />Warranty</strong><span>Return criteria matched</span></div><div><strong><Wrench size={19} aria-hidden="true" />Technical Service</strong><span>Recurring fault confirmed</span></div></div>
-      <label className="review-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I have reviewed the supporting records.</span></label>
-      <div className="post-actions"><h3>Actions after confirmation</h3><p><UploadSimple size={20} aria-hidden="true" />Upload warranty evidence</p><p><Paperclip size={20} aria-hidden="true" />Attach technical findings</p><p><ChatText size={20} aria-hidden="true" />Prepare customer response draft</p></div>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} aria-hidden="true" />Back</button><button className="primary-button wide button-with-icon" disabled={!confirmed} onClick={onConfirm}><CheckCircle size={18} aria-hidden="true" />Confirm &amp; Complete Case</button></div>
+    <section className="screen-panel decision-screen">
+      <div className="screen-heading"><div><p className="section-kicker">HUMAN DECISION</p><h2>Confirm Case Outcome</h2></div></div>
+      <div className="decision-options" role="radiogroup" aria-label="Case outcome">
+        <label className={decision === "allocation" ? "selected" : ""}><input type="radio" name="case-decision" checked={decision === "allocation"} onChange={() => chooseDecision("allocation")} /><span><CheckCircle size={21} /><strong>Three Guarantees applies</strong><small>Confirm or adjust the BMW/dealer compensation allocation.</small></span><b>AI recommended</b></label>
+        <label className={decision === "not-covered" ? "selected not-covered" : ""}><input type="radio" name="case-decision" checked={decision === "not-covered"} onChange={() => chooseDecision("not-covered")} /><span><WarningCircle size={21} /><strong>Not covered by Three Guarantees</strong><small>Close this case and notify the dealer of the decision.</small></span></label>
+      </div>
+      {decision === "allocation" ? <section className="allocation-editor"><div className="editor-heading"><div><span>COMPENSATION ALLOCATION</span><h3>Set the final commercial shares</h3></div><small>Must total 100%</small></div><div className="share-inputs"><label><span>BMW share</span><div><input aria-label="BMW compensation share" type="number" min="0" max="100" value={bmwShare} onChange={(event) => setBmwShare(Number(event.target.value))} /><b>%</b></div></label><span>+</span><label><span>Dealer share</span><div><input aria-label="Dealer compensation share" type="number" min="0" max="100" value={dealerShare} onChange={(event) => setDealerShare(Number(event.target.value))} /><b>%</b></div></label><strong className={allocationValid ? "valid" : "invalid"}>{bmwShare + dealerShare}%</strong></div><div className="allocation-bar large"><span style={{ width: `${Math.max(0, Math.min(100, bmwShare))}%` }} /><i style={{ width: `${Math.max(0, Math.min(100, dealerShare))}%` }} /></div><p><ShieldCheck size={17} />Three Guarantees: Applicable <span>·</span> TSARA: Product-related fault <span>·</span> Dealer-induced damage: Not found</p></section> : <section className="not-covered-form"><WarningCircle size={24} /><div><h3>Close as not covered</h3><p>This path records a non-coverage decision and prepares a notification for the dealer.</p><label>Decision reason<textarea defaultValue="The available evidence does not meet the Three Guarantees eligibility criteria." /></label></div></section>}
+      <label className="review-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>{decision === "allocation" ? "I have reviewed the Agent evidence and confirm this compensation allocation." : "I confirm that this case should be closed as not covered and the dealer should be notified."}</span></label>
+      <div className="post-actions"><h3>Actions after confirmation</h3>{decision === "allocation" ? <><p><CheckSquare size={20} />Record Three Guarantees applicability</p><p><Paperclip size={20} />Attach Agent evidence to the allocation decision</p><p><ChatText size={20} />Prepare BMW/dealer settlement instruction</p></> : <><p><CheckSquare size={20} />Close the Customer Care case as not covered</p><p><ChatText size={20} />Send the decision notice to the dealer</p><p><FileText size={20} />Prepare customer response draft</p></>}</div>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back</button><button className="primary-button wide button-with-icon" disabled={!confirmed || (decision === "allocation" && !allocationValid)} onClick={onConfirm}><CheckCircle size={18} />{decision === "allocation" ? "Confirm Allocation & Close" : "Close Case & Notify Dealer"}</button></div>
     </section>
   );
 }
 
-function CompletionScreen({ onWorkbench }: { onWorkbench: () => void }) {
+function CompletionScreen({ decision, bmwShare, dealerShare, onWorkbench }: { decision: CaseDecision; bmwShare: number; dealerShare: number; onWorkbench: () => void }) {
+  const actions = decision === "allocation" ? ["Three Guarantees applicability recorded", `Compensation allocation confirmed: BMW ${bmwShare}% / Dealer ${dealerShare}%`, "Agent evidence attached to the decision", "BMW/dealer settlement instruction prepared"] : ["Case closed as not covered by Three Guarantees", "Non-coverage reason recorded", "Dealer decision notice prepared", "Customer response draft prepared"];
   return (
     <section className="screen-panel completion-screen">
       <div className="screen-heading"><div><p className="section-kicker">EXECUTION</p><h2>Case Completed</h2></div></div>
-      <div className="success-banner"><span><Check size={20} weight="bold" aria-hidden="true" /></span><strong>Success</strong><p>The vehicle return recommendation has been confirmed.</p></div>
+      <div className="success-banner"><span><Check size={20} weight="bold" /></span><strong>Success</strong><p>{decision === "allocation" ? `Three Guarantees confirmed with BMW ${bmwShare}% / Dealer ${dealerShare}% compensation allocation.` : "Case closed as not covered; the dealer notification is ready."}</p></div>
       <h3 className="subheading">Actions completed</h3>
-      <div className="completed-actions">{caseData.completionActions.map((action, index) => <p key={action}><CompletionActionIcon index={index} />{action}</p>)}</div>
+      <div className="completed-actions">{actions.map((action, index) => <p key={action}><CompletionActionIcon index={index} />{action}</p>)}</div>
       <div className="case-record"><span>Case record</span><strong><FolderOpen size={19} aria-hidden="true" />Customer Care Case</strong><b>{caseData.id}</b></div>
       <div className="screen-actions completion-actions"><span>Status: <b>Completed</b></span><button className="primary-button wide button-with-icon" onClick={onWorkbench}><ArrowLeft size={18} aria-hidden="true" />Back to Workbench</button></div>
     </section>
@@ -577,22 +602,18 @@ function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onC
   );
 }
 
-function EvidenceDrawer({ type, onClose }: { type: Exclude<Drawer, null>; onClose: () => void }) {
+function RecommendationEvidenceDrawer({ agent, onClose }: { agent: ReviewAgent; onClose: () => void }) {
+  const conclusion = settlementRecommendation.conclusions.find((item) => item.agentId === agent.id);
   return (
     <div className="overlay drawer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-        <div className="drawer-heading"><div><p className="section-kicker">ORIGINAL EVIDENCE</p><h2 id="drawer-title">{type === "records" ? <><Database size={25} aria-hidden="true" />Supporting Records</> : <><Books size={25} aria-hidden="true" />Previous Case Guidance</>}</h2></div><button className="close-button" aria-label="Close evidence" onClick={onClose}><X size={22} aria-hidden="true" /></button></div>
-        {type === "records" ? <RecordsTable /> : <CasesTable />}
-        <div className="drawer-footer"><button className="primary-button wide button-with-icon" onClick={onClose}><ArrowLeft size={18} aria-hidden="true" />Back to Review</button></div>
+      <section className="drawer recommendation-evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+        <div className="drawer-heading"><div><p className="section-kicker">RECOMMENDATION EVIDENCE</p><h2 id="drawer-title"><ReviewAgentIcon category={agent.category} size={25} />{agent.evidence.title}</h2><span>{agent.name} · {agent.system} · {agent.role}</span></div><button className="close-button" aria-label="Close recommendation evidence" onClick={onClose}><X size={22} /></button></div>
+        {conclusion && <section className="decision-linkage"><span>CONCLUSION SUPPORTED</span><div><strong>{conclusion.label}</strong><b>{conclusion.value}</b></div><p>{conclusion.rationale}</p></section>}
+        <section className="evidence-query-detail"><div><span>REQUEST SENT TO AGENT</span><p>{agent.requirement}</p></div><div><span>AGENT RESULT</span><p>{agent.resultSummary}</p></div><div><span>IMPACT ON DECISION</span><p>{agent.decisionImpact}</p></div></section>
+        <AgentEvidence evidence={agent.evidence} />
+        <section className="evidence-audit"><div><span>Source system</span><strong>{agent.system}</strong></div><div><span>Case scope</span><strong>{caseData.id} · VIN {caseData.vin}</strong></div><div><span>Retrieved</span><strong>18 Aug 2026 · 14:32</strong></div><div><span>Access</span><strong>Read only · Case specific</strong></div></section>
+        <div className="drawer-footer"><button className="primary-button wide button-with-icon" onClick={onClose}><ArrowLeft size={18} />Back to Recommendation</button></div>
       </section>
     </div>
   );
-}
-
-function RecordsTable() {
-  return <><div className="evidence-summary"><RoleBadge>Data Agent Results</RoleBadge><span><Barcode size={18} aria-hidden="true" />VIN {caseData.vin}</span><span><Eye size={18} aria-hidden="true" />Read only</span></div><div className="data-table"><div className="data-row data-head"><span>Date</span><span>Record</span><span>Finding</span><span>Source</span></div>{caseData.records.map((record) => <div className="data-row" key={record.record}><span>{record.date}</span><strong><FileText size={18} aria-hidden="true" />{record.record}</strong><span>{record.finding}</span><span>{record.source}</span></div>)}</div></>;
-}
-
-function CasesTable() {
-  return <><div className="evidence-summary"><RoleBadge>Knowledge Agent</RoleBadge><span><Books size={18} aria-hidden="true" />3 comparable cases</span><span><Target size={18} aria-hidden="true" />Relevance: High</span></div><div className="data-table cases-table"><div className="data-row data-head"><span>Case</span><span>Issue</span><span>Handling</span><span>Outcome</span></div>{caseData.previousCases.map((record) => <div className="data-row" key={record.caseId}><strong><FolderOpen size={18} aria-hidden="true" />{record.caseId}</strong><span>{record.issue}</span><span>{record.handling}</span><span className="completed-text"><CheckCircle size={18} aria-hidden="true" />{record.outcome}</span></div>)}</div><aside className="guidance-box"><strong><Books size={20} aria-hidden="true" />Handling Guidance</strong><p>Use the Three Guarantees vehicle-return route when configured criteria are met.</p><p>Attach warranty and technical findings to the Customer Care case.</p></aside></>;
 }
