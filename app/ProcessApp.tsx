@@ -15,7 +15,6 @@ import {
   CheckCircle,
   CheckSquare,
   ClipboardText,
-  Cpu,
   Database,
   Eye,
   FileText,
@@ -32,6 +31,7 @@ import {
   Play,
   PaperPlaneTilt,
   PhoneCall,
+  Robot,
   Scan,
   ShieldCheck,
   SquaresFour,
@@ -55,6 +55,12 @@ type ComplaintSource = "call" | "scan";
 type CaseDecision = "allocation" | "not-covered";
 
 const steps = ["Intake", "Review", "Recommendation", "Decision", "Execution"];
+
+function createDecisionInstruction(decision: CaseDecision, bmwShare: number, dealerShare: number) {
+  return decision === "allocation"
+    ? `Confirm this case as eligible under the Three Guarantees policy. Allocate the commercial compensation cost at BMW ${bmwShare}% and dealer ${dealerShare}%. Record the decision with the supporting Agent evidence, prepare the settlement instruction for the dealer, and close the case after the instruction is issued.`
+    : "Close this case as not covered under the Three Guarantees policy. Record the non-coverage reason with the supporting Agent evidence, notify the dealer of the decision, and prepare a customer response draft.";
+}
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
   return <span className="role-badge">{children}</span>;
@@ -99,6 +105,7 @@ export default function ProcessApp() {
   const [caseDecision, setCaseDecision] = useState<CaseDecision>("allocation");
   const [bmwShare, setBmwShare] = useState(settlementRecommendation.bmwShare);
   const [dealerShare, setDealerShare] = useState(settlementRecommendation.dealerShare);
+  const [decisionInstruction, setDecisionInstruction] = useState(() => createDecisionInstruction("allocation", settlementRecommendation.bmwShare, settlementRecommendation.dealerShare));
   const [plannedAgents, setPlannedAgents] = useState<ReviewAgent[]>(() => recommendedReviewAgents.map((agent) => ({ ...agent })));
 
   const openCase = () => {
@@ -112,6 +119,7 @@ export default function ProcessApp() {
     setCaseDecision("allocation");
     setBmwShare(settlementRecommendation.bmwShare);
     setDealerShare(settlementRecommendation.dealerShare);
+    setDecisionInstruction(createDecisionInstruction("allocation", settlementRecommendation.bmwShare, settlementRecommendation.dealerShare));
   };
 
   const backToWorkbench = () => {
@@ -172,8 +180,8 @@ export default function ProcessApp() {
             />
           )}
           {stage === 3 && <RecommendationScreen agents={plannedAgents} onEvidence={setRecommendationEvidence} onNext={() => setStage(4)} />}
-          {stage === 4 && <ConfirmationScreen decision={caseDecision} setDecision={setCaseDecision} bmwShare={bmwShare} setBmwShare={setBmwShare} dealerShare={dealerShare} setDealerShare={setDealerShare} confirmed={confirmed} setConfirmed={setConfirmed} onBack={() => setStage(3)} onConfirm={completeCase} />}
-          {stage === 5 && <CompletionScreen decision={caseDecision} bmwShare={bmwShare} dealerShare={dealerShare} onWorkbench={backToWorkbench} />}
+          {stage === 4 && <ConfirmationScreen decision={caseDecision} setDecision={setCaseDecision} bmwShare={bmwShare} setBmwShare={setBmwShare} dealerShare={dealerShare} setDealerShare={setDealerShare} instruction={decisionInstruction} setInstruction={setDecisionInstruction} confirmed={confirmed} setConfirmed={setConfirmed} onBack={() => setStage(3)} onConfirm={completeCase} />}
+          {stage === 5 && <CompletionScreen decision={caseDecision} bmwShare={bmwShare} dealerShare={dealerShare} instruction={decisionInstruction} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
@@ -558,7 +566,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
           <header className="network-heading"><div><span>AGENT COLLABORATION</span><h3>{state === "running" ? "Customer Care is coordinating the review" : "All Agent results returned"}</h3><p>{state === "running" ? "A7 sends one business request at a time and receives the result before continuing." : "Select Evidence on any Agent to review its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Live execution</> : <><CheckCircle size={16} weight="fill" />Review complete</>}</span></header>
           <div className="network-canvas">
             <div className="planner-robot">
-              <div className="robot-avatar planner" aria-hidden="true"><Cpu size={72} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
+              <div className="robot-avatar planner" aria-hidden="true"><Robot size={72} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
               <strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small>
             </div>
             <div className="agent-network-list">
@@ -570,7 +578,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 return <div className={`network-agent-row ${done ? "done" : ""} ${active ? "active" : ""}`} key={agent.id}>
                   <div className={`agent-connection ${phase}`}><span className="network-packet">{runPhase === "return" && active ? <Check size={14} weight="bold" /> : <PaperPlaneTilt size={15} weight="fill" />}</span><b>{active ? runPhase === "return" ? "RESULT" : runPhase === "working" ? "PROCESSING" : "REQUEST" : done ? "RESULT RECEIVED" : "QUEUED"}</b></div>
                   <div className="agent-robot-node">
-                    <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Cpu size={58} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
+                    <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Robot size={58} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
                     <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agent.role}</em><small>{status}</small></div>
                     {state === "results" && <button onClick={() => toggleEvidence(agent.id)} aria-expanded={evidenceAgentId === agent.id}><Eye size={16} />{evidenceAgentId === agent.id ? "Hide Evidence" : "View Evidence"}</button>}
                   </div>
@@ -634,33 +642,47 @@ function RecommendationScreen({ agents, onEvidence, onNext }: { agents: ReviewAg
   );
 }
 
-function ConfirmationScreen({ decision, setDecision, bmwShare, setBmwShare, dealerShare, setDealerShare, confirmed, setConfirmed, onBack, onConfirm }: { decision: CaseDecision; setDecision: (decision: CaseDecision) => void; bmwShare: number; setBmwShare: (value: number) => void; dealerShare: number; setDealerShare: (value: number) => void; confirmed: boolean; setConfirmed: (value: boolean) => void; onBack: () => void; onConfirm: () => void }) {
+function ConfirmationScreen({ decision, setDecision, bmwShare, setBmwShare, dealerShare, setDealerShare, instruction, setInstruction, confirmed, setConfirmed, onBack, onConfirm }: { decision: CaseDecision; setDecision: (decision: CaseDecision) => void; bmwShare: number; setBmwShare: (value: number) => void; dealerShare: number; setDealerShare: (value: number) => void; instruction: string; setInstruction: (value: string) => void; confirmed: boolean; setConfirmed: (value: boolean) => void; onBack: () => void; onConfirm: () => void }) {
   const allocationValid = bmwShare >= 0 && dealerShare >= 0 && bmwShare + dealerShare === 100;
   const chooseDecision = (next: CaseDecision) => {
     setDecision(next);
+    setInstruction(createDecisionInstruction(next, bmwShare, dealerShare));
+    setConfirmed(false);
+  };
+  const regenerateInstruction = () => {
+    setInstruction(createDecisionInstruction(decision, bmwShare, dealerShare));
     setConfirmed(false);
   };
   return (
     <section className="screen-panel decision-screen">
       <div className="screen-heading"><div><p className="section-kicker">HUMAN DECISION</p><h2>Confirm Case Outcome</h2></div></div>
+      <section className="decision-ai-recommendation" aria-label="AI recommendation from the previous step">
+        <div className="decision-ai-icon" aria-hidden="true"><MagicWand size={22} weight="duotone" /></div>
+        <div><span>AI RECOMMENDATION FROM REVIEW</span><h3>Three Guarantees applies</h3><p>{settlementRecommendation.summary}</p></div>
+        <div className="decision-ai-allocation"><small>Recommended allocation</small><strong>BMW {settlementRecommendation.bmwShare}% <i>/</i> Dealer {settlementRecommendation.dealerShare}%</strong></div>
+      </section>
       <div className="decision-options" role="radiogroup" aria-label="Case outcome">
         <label className={decision === "allocation" ? "selected" : ""}><input type="radio" name="case-decision" checked={decision === "allocation"} onChange={() => chooseDecision("allocation")} /><span><CheckCircle size={21} /><strong>Three Guarantees applies</strong><small>Confirm or adjust the BMW/dealer compensation allocation.</small></span><b>AI recommended</b></label>
         <label className={decision === "not-covered" ? "selected not-covered" : ""}><input type="radio" name="case-decision" checked={decision === "not-covered"} onChange={() => chooseDecision("not-covered")} /><span><WarningCircle size={21} /><strong>Not covered by Three Guarantees</strong><small>Close this case and notify the dealer of the decision.</small></span></label>
       </div>
       {decision === "allocation" ? <section className="allocation-editor"><div className="editor-heading"><div><span>COMPENSATION ALLOCATION</span><h3>Set the final commercial shares</h3></div><small>Must total 100%</small></div><div className="share-inputs"><label><span>BMW share</span><div><input aria-label="BMW compensation share" type="number" min="0" max="100" value={bmwShare} onChange={(event) => setBmwShare(Number(event.target.value))} /><b>%</b></div></label><span>+</span><label><span>Dealer share</span><div><input aria-label="Dealer compensation share" type="number" min="0" max="100" value={dealerShare} onChange={(event) => setDealerShare(Number(event.target.value))} /><b>%</b></div></label><strong className={allocationValid ? "valid" : "invalid"}>{bmwShare + dealerShare}%</strong></div><div className="allocation-bar large"><span style={{ width: `${Math.max(0, Math.min(100, bmwShare))}%` }} /><i style={{ width: `${Math.max(0, Math.min(100, dealerShare))}%` }} /></div><p><ShieldCheck size={17} />Three Guarantees: Applicable <span>·</span> TSARA: Product-related fault <span>·</span> Dealer-induced damage: Not found</p></section> : <section className="not-covered-form"><WarningCircle size={24} /><div><h3>Close as not covered</h3><p>This path records a non-coverage decision and prepares a notification for the dealer.</p><label>Decision reason<textarea defaultValue="The available evidence does not meet the Three Guarantees eligibility criteria." /></label></div></section>}
-      <label className="review-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>{decision === "allocation" ? "I have reviewed the Agent evidence and confirm this compensation allocation." : "I confirm that this case should be closed as not covered and the dealer should be notified."}</span></label>
-      <div className="post-actions"><h3>Actions after confirmation</h3>{decision === "allocation" ? <><p><CheckSquare size={20} />Record Three Guarantees applicability</p><p><Paperclip size={20} />Attach Agent evidence to the allocation decision</p><p><ChatText size={20} />Prepare BMW/dealer settlement instruction</p></> : <><p><CheckSquare size={20} />Close the Customer Care case as not covered</p><p><ChatText size={20} />Send the decision notice to the dealer</p><p><FileText size={20} />Prepare customer response draft</p></>}</div>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back</button><button className="primary-button wide button-with-icon" disabled={!confirmed || (decision === "allocation" && !allocationValid)} onClick={onConfirm}><CheckCircle size={18} />{decision === "allocation" ? "Confirm Allocation & Close" : "Close Case & Notify Dealer"}</button></div>
+      <section className="decision-instruction">
+        <header><div><span>FINAL HUMAN INSTRUCTION</span><h3>Describe the decision and actions in natural language</h3><p>AI prepared a draft from the selected outcome. Edit it before approval.</p></div><button className="secondary-button button-with-icon" onClick={regenerateInstruction}><MagicWand size={16} />Generate AI draft</button></header>
+        <label htmlFor="decision-instruction"><span>Instruction to execute <b>AI-generated · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => { setInstruction(event.target.value); setConfirmed(false); }} /></label>
+      </section>
+      <label className="review-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I have reviewed the Agent evidence and approve the instruction above as the final human decision.</span></label>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back</button><button className="primary-button wide button-with-icon" disabled={!confirmed || !instruction.trim() || (decision === "allocation" && !allocationValid)} onClick={onConfirm}><CheckCircle size={18} />{decision === "allocation" ? "Approve Instruction & Close" : "Approve Closure Instruction"}</button></div>
     </section>
   );
 }
 
-function CompletionScreen({ decision, bmwShare, dealerShare, onWorkbench }: { decision: CaseDecision; bmwShare: number; dealerShare: number; onWorkbench: () => void }) {
+function CompletionScreen({ decision, bmwShare, dealerShare, instruction, onWorkbench }: { decision: CaseDecision; bmwShare: number; dealerShare: number; instruction: string; onWorkbench: () => void }) {
   const actions = decision === "allocation" ? ["Three Guarantees applicability recorded", `Compensation allocation confirmed: BMW ${bmwShare}% / Dealer ${dealerShare}%`, "Agent evidence attached to the decision", "BMW/dealer settlement instruction prepared"] : ["Case closed as not covered by Three Guarantees", "Non-coverage reason recorded", "Dealer decision notice prepared", "Customer response draft prepared"];
   return (
     <section className="screen-panel completion-screen">
       <div className="screen-heading"><div><p className="section-kicker">EXECUTION</p><h2>Case Completed</h2></div></div>
       <div className="success-banner"><span><Check size={20} weight="bold" /></span><strong>Success</strong><p>{decision === "allocation" ? `Three Guarantees confirmed with BMW ${bmwShare}% / Dealer ${dealerShare}% compensation allocation.` : "Case closed as not covered; the dealer notification is ready."}</p></div>
+      <section className="approved-instruction"><span>APPROVED HUMAN INSTRUCTION</span><p>{instruction}</p></section>
       <h3 className="subheading">Actions completed</h3>
       <div className="completed-actions">{actions.map((action, index) => <p key={action}><CompletionActionIcon index={index} />{action}</p>)}</div>
       <div className="case-record"><span>Case record</span><strong><FolderOpen size={19} aria-hidden="true" />Customer Care Case</strong><b>{caseData.id}</b></div>
