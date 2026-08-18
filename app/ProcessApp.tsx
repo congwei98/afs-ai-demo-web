@@ -31,6 +31,7 @@ import {
   Play,
   PaperPlaneTilt,
   PhoneCall,
+  Robot,
   Scan,
   ShieldCheck,
   SquaresFour,
@@ -167,6 +168,10 @@ export default function ProcessApp() {
               setAgents={setPlannedAgents}
               onAccess={() => setAccessOpen(true)}
               onRunComplete={() => setReviewState("results")}
+              onReplan={() => {
+                setReviewState("plan");
+                setAccessGranted(false);
+              }}
               onNext={() => setStage(3)}
             />
           )}
@@ -417,9 +422,9 @@ function AgentEvidence({ evidence }: { evidence: EvidenceBlock }) {
   );
 }
 
-function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRunComplete, onNext }: { state: ReviewState; accessGranted: boolean; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; onAccess: () => void; onRunComplete: () => void; onNext: () => void }) {
+function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRunComplete, onReplan, onNext }: { state: ReviewState; accessGranted: boolean; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onNext: () => void }) {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["warranty"]));
-  const [evidenceAgents, setEvidenceAgents] = useState<Set<string>>(new Set());
+  const [evidenceAgentId, setEvidenceAgentId] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [runCursor, setRunCursor] = useState(0);
@@ -449,11 +454,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
     return next;
   });
 
-  const toggleEvidence = (id: string) => setEvidenceAgents((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  const toggleEvidence = (id: string) => setEvidenceAgentId((current) => current === id ? null : id);
 
   const updateRequirement = (id: string, requirement: string) => setAgents((current) => current.map((agent) => agent.id === id ? { ...agent, requirement } : agent));
 
@@ -470,11 +471,14 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
       next.delete(id);
       return next;
     });
-    setEvidenceAgents((current) => {
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
+    setEvidenceAgentId((current) => current === id ? null : current);
+  };
+
+  const replanAgents = () => {
+    setRunCursor(0);
+    setRunPhase("request");
+    setEvidenceAgentId(null);
+    onReplan();
   };
 
   const activeAgent = agents[runCursor];
@@ -484,49 +488,67 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
     <section className="screen-panel review-plan-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>{state === "results" ? "Agent Review Results" : state === "running" ? "Executing Review Plan" : "Review Plan"}</h2></div>{accessGranted ? <span className="success-pill">Access allowed</span> : <span className="ai-plan-badge"><MagicWand size={16} />AI-generated plan</span>}</div>
 
-      <section className="plan-rationale">
+      {state === "plan" && <section className="plan-rationale">
         <div className="rationale-icon"><MagicWand size={22} /></div>
         <div><span>AI RECOMMENDATION</span><h3>{reviewPlanContext.recommendation}</h3><button onClick={() => setContextOpen(!contextOpen)}><Eye size={16} />{contextOpen ? "Hide complaint evidence" : "View referenced evidence"}</button></div>
         {contextOpen && <div className="plan-context-evidence">{reviewPlanContext.evidence.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>From complaint intake</small></div>)}</div>}
-      </section>
+      </section>}
 
       {(state === "running" || state === "results") && (
-        <section className={`orchestration-map ${state}`} aria-label="Customer Care agent orchestration">
-          <div className="planner-node"><span><FlowArrow size={22} /></span><div><strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small></div></div>
-          <div className={`request-lane ${state === "running" ? runPhase : "complete"}`}><span className="request-packet"><PaperPlaneTilt size={17} /></span><b>{state === "results" ? "Evidence consolidated" : runPhase === "return" ? "Evidence response" : "Business request"}</b></div>
-          <div className="orchestrated-agents">{agents.map((agent, index) => <div className={`${index < runCursor || state === "results" ? "done" : ""} ${index === runCursor && state === "running" ? "active" : ""}`} key={agent.id}><span><ReviewAgentIcon category={agent.category} size={18} /></span><div><strong>{agent.name}</strong><em>{agent.role}</em><small>{index < runCursor || state === "results" ? "Evidence returned" : index === runCursor && state === "running" ? runPhase === "working" ? "Querying source" : runPhase === "return" ? "Returning result" : "Request received" : "Waiting"}</small></div></div>)}</div>
-          <p role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "All selected agents returned evidence to Customer Care." : runMessage}</p>
+        <section className={`agent-network ${state}`} aria-label="Customer Care agent orchestration">
+          <header className="network-heading"><div><span>AGENT COLLABORATION</span><h3>{state === "running" ? "Customer Care is coordinating the review" : "All Agent results returned"}</h3><p>{state === "running" ? "A7 sends one business request at a time and receives the result before continuing." : "Select Evidence on any Agent to review its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Live execution</> : <><CheckCircle size={16} weight="fill" />Review complete</>}</span></header>
+          <div className="network-canvas">
+            <div className="planner-robot">
+              <div className="robot-avatar planner" aria-hidden="true"><Robot size={82} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
+              <strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small>
+            </div>
+            <div className="agent-network-list">
+              {agents.map((agent, index) => {
+                const done = index < runCursor || state === "results";
+                const active = index === runCursor && state === "running";
+                const phase = active ? runPhase : done ? "complete" : "waiting";
+                const status = done ? "Result returned" : active ? runPhase === "working" ? "Working in source system" : runPhase === "return" ? "Returning result to A7" : "Request sent by A7" : "Waiting for request";
+                return <div className={`network-agent-row ${done ? "done" : ""} ${active ? "active" : ""}`} key={agent.id}>
+                  <div className={`agent-connection ${phase}`}><span className="network-packet">{runPhase === "return" && active ? <Check size={14} weight="bold" /> : <PaperPlaneTilt size={15} weight="fill" />}</span><b>{active ? runPhase === "return" ? "RESULT" : runPhase === "working" ? "PROCESSING" : "REQUEST" : done ? "RESULT RECEIVED" : "QUEUED"}</b></div>
+                  <div className="agent-robot-node">
+                    <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Robot size={68} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
+                    <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agent.role}</em><small>{status}</small></div>
+                    {state === "results" && <button onClick={() => toggleEvidence(agent.id)} aria-expanded={evidenceAgentId === agent.id}><Eye size={16} />{evidenceAgentId === agent.id ? "Hide Evidence" : "View Evidence"}</button>}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+          <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "A7 has received and organized all selected Agent results." : runMessage}</p>
+          {state === "results" && evidenceAgentId && <div className="network-evidence"><AgentEvidence evidence={agents.find((agent) => agent.id === evidenceAgentId)!.evidence} /></div>}
         </section>
       )}
 
-      <div className="action-plan-heading"><div><p>RECOMMENDED ACTION PLAN</p><h3>{agents.length} review steps</h3><span>{state === "plan" ? "Open any step to review or edit the AI-generated requirement." : state === "running" ? "Requests run sequentially so each result remains attributable." : "Open Evidence on each step to inspect its source and decision relevance."}</span></div>{state === "plan" && <button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button>}</div>
+      {state === "plan" && <div className="action-plan-heading"><div><p>RECOMMENDED ACTION PLAN</p><h3>{agents.length} review steps</h3><span>Open any step to review or edit the AI-generated requirement.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
-      {addOpen && <section className="add-agent-panel"><div><strong>Add another review step</strong><span>Human-added Agents join the same authorization and execution flow.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} disabled={agents.some((item) => item.id === agent.id)} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.name}<small>{agent.system} · {agent.role}</small></strong><Plus size={18} /></button>)}</section>}
+      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add another review step</strong><span>Human-added Agents join the same authorization and execution flow.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} disabled={agents.some((item) => item.id === agent.id)} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.name}<small>{agent.system} · {agent.role}</small></strong><Plus size={18} /></button>)}</section>}
 
-      <div className="review-agent-list">
+      {state === "plan" && <div className="review-agent-list">
         {agents.map((agent, index) => {
           const expanded = expandedAgents.has(agent.id);
-          const evidenceOpen = evidenceAgents.has(agent.id);
-          const completed = state === "results" || (state === "running" && index < runCursor);
-          const active = state === "running" && index === runCursor;
           return (
-            <article className={`review-agent-card ${active ? "active" : ""} ${completed ? "completed" : ""}`} key={agent.id}>
+            <article className="review-agent-card" key={agent.id}>
               <div className="agent-card-top"><button className="agent-card-header" onClick={() => toggleExpanded(agent.id)} aria-expanded={expanded}>
-                <span className="step-number">{completed ? <Check size={16} weight="bold" /> : index + 1}</span>
+                <span className="step-number">{index + 1}</span>
                 <span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span>
                 <span className="agent-card-title"><strong>{agent.name} <small>{agent.system}</small></strong><span>{agent.purpose}</span></span>
                 <RoleBadge>{agent.role}</RoleBadge>
                 {agent.addedBy && <span className="human-added">Added by human</span>}
-                <span className={`card-status ${active ? "active" : completed ? "done" : ""}`}>{active ? runPhase === "working" ? "Querying" : runPhase === "return" ? "Returning" : "Requested" : completed ? "Completed" : "Ready"}</span>
+                <span className="card-status">Ready</span>
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
-              {expanded && <div className="agent-card-body"><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} disabled={state !== "plan"} onChange={(event) => updateRequirement(agent.id, event.target.value)} /></label>{state === "results" && <div className="agent-result"><CheckCircle size={19} weight="fill" /><p><span>Result</span><strong>{agent.resultSummary}</strong></p><button onClick={() => toggleEvidence(agent.id)}><Eye size={16} />{evidenceOpen ? "Hide Evidence" : "View Evidence"}</button></div>}{evidenceOpen && <AgentEvidence evidence={agent.evidence} />}</div>}
+              {expanded && <div className="agent-card-body"><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateRequirement(agent.id, event.target.value)} /></label></div>}
             </article>
           );
         })}
-      </div>
+      </div>}
 
-      <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "You can edit the plan before granting access." : state === "running" ? runMessage : `${agents.length} of ${agents.length} Agent requests completed.`}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Review Access &amp; Run Plan</button>}{state === "results" && <button className="primary-button wide button-with-icon" onClick={onNext}>Prepare Recommendation<ArrowRight size={18} /></button>}</div>
+      <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "You can edit the plan before granting access." : state === "running" ? runMessage : `${agents.length} of ${agents.length} Agent requests completed.`}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Review Access &amp; Run Plan</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Replan Agents</button><button className="primary-button wide button-with-icon" onClick={onNext}>Prepare Recommendation<ArrowRight size={18} /></button></div>}</div>
     </section>
   );
 }

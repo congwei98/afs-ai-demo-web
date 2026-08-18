@@ -126,7 +126,7 @@ export const optionalReviewAgents: ReviewAgent[] = [
   },
   {
     id: "ocr",
-    name: "Complaint Document OCR",
+    name: "OCR Agent",
     system: "Document Services",
     role: "Document Agent",
     category: "ocr",
