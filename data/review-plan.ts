@@ -20,9 +20,9 @@ export type ReviewAgent = {
 };
 
 export const reviewPlanContext = {
-  objective: "Determine Three Guarantees applicability and recommend the compensation allocation between BMW and the dealer.",
+  objective: "Check the policy and suggest how BMW and the dealer should share the cost.",
   recommendation:
-    "Verify Three Guarantees eligibility, establish the technical fault origin, then benchmark comparable cases to recommend the commercial compensation shares between BMW and the dealer.",
+    "Check the repair history, confirm the fault source, and compare similar cases before suggesting the cost share.",
   evidence: [
     { label: "Complaint", value: "Recurring loss of power" },
     { label: "Repair history", value: "Customer stated 3 visits" },
@@ -37,10 +37,10 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "BBS-A-4",
     role: "Data Agent",
     category: "warranty",
-    purpose: "Verify repair frequency and Three Guarantees eligibility",
-    requirement: "Retrieve all repair orders and warranty claims for this VIN. Confirm how many times the same loss-of-power issue was repaired and whether the return threshold is met.",
-    resultSummary: "Three repair visits for the same issue were confirmed; the repeated-repair threshold is met.",
-    decisionImpact: "Supports the conclusion that the case is covered by the Three Guarantees repeated-repair provision.",
+    purpose: "Check repair count and policy fit",
+    requirement: "Get the repair and warranty records for this VIN. Count repairs for the same fault and check the Three Guarantees rule.",
+    resultSummary: "The same fault was repaired three times. The policy rule is met.",
+    decisionImpact: "Supports handling this case under Three Guarantees.",
     evidence: {
       kind: "records",
       title: "Warranty & repair records",
@@ -58,10 +58,10 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "C5-CN-A-6",
     role: "Data Agent",
     category: "technical",
-    purpose: "Use the TSARA Result to determine responsibility allocation",
-    requirement: "Retrieve the latest TSARA Result. Identify whether the fault is product-related, remains unresolved, and was not introduced by dealer repair work so responsibility can be allocated between BMW and the dealer.",
-    resultSummary: "The TSARA Result attributes the unresolved fault to the product and finds no dealer-induced damage.",
-    decisionImpact: "Confirms the product-origin basis for Three Guarantees handling. The commercial BMW/dealer compensation split is determined separately from technical fault attribution.",
+    purpose: "Check the TSARA result and fault source",
+    requirement: "Get the latest TSARA result. Check whether the fault comes from the product, is still open, and was not caused by dealer repair work.",
+    resultSummary: "TSARA says the fault comes from the product. No dealer-caused damage was found.",
+    decisionImpact: "Confirms the fault source. The cost share is checked separately.",
     evidence: {
       kind: "diagnosis",
       title: "TSARA Result",
@@ -85,10 +85,10 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "Enterprise Knowledge",
     role: "Knowledge Agent",
     category: "knowledge",
-    purpose: "Benchmark BMW and dealer compensation allocations",
-    requirement: "Find previous Three Guarantees cases involving recurring product faults and vehicle-return requests. Rank relevance using fault origin, customer request and repair count; compare the BMW/dealer compensation allocation in each case.",
-    resultSummary: "Highly comparable cases use a BMW 20% / Dealer 80% commercial compensation allocation.",
-    decisionImpact: "Supports 20% BMW and 80% dealer as the recommended commercial allocation for this Three Guarantees case.",
+    purpose: "Compare cost shares in similar cases",
+    requirement: "Find past Three Guarantees cases with the same fault and customer request. Compare the repair count and the BMW/dealer cost share.",
+    resultSummary: "The closest cases use BMW 20% and dealer 80%.",
+    decisionImpact: "Supports BMW 20% and dealer 80% for this case.",
     evidence: {
       kind: "cases",
       title: "Comparable case analysis",
@@ -109,10 +109,10 @@ export const optionalReviewAgents: ReviewAgent[] = [
     system: "BBS-A-3 Parts",
     role: "Data Agent",
     category: "parts",
-    purpose: "Configure an enterprise data query for this review",
-    requirement: "Query BBS-A-3 for parts ordered against the related repair orders. Compare each order date with its actual dealer arrival date and flag any critical part that took more than 30 days to arrive.",
-    resultSummary: "The replacement power-control module arrived after 36 days—6 days beyond the 30-day threshold.",
-    decisionImpact: "Provides additional context on BMW parts-supply responsibility if this step is included in the plan.",
+    purpose: "Check whether key parts took over 30 days to arrive",
+    requirement: "Check BBS-A-3 for parts linked to these repairs. Compare order and arrival dates. Flag any key part that took more than 30 days.",
+    resultSummary: "The power-control module took 36 days to arrive, 6 days over the limit.",
+    decisionImpact: "Adds context about parts supply for the final decision.",
     evidence: {
       kind: "parts",
       title: "Parts delivery timeline",
@@ -130,10 +130,10 @@ export const optionalReviewAgents: ReviewAgent[] = [
     system: "Document Services",
     role: "Document Agent",
     category: "ocr",
-    purpose: "Validate the scanned complaint against the call record",
-    requirement: "Read the regulator complaint scan. Extract the claimant, vehicle, reported issue and requested resolution, then compare them with the call transcript.",
+    purpose: "Check the scanned complaint against the call",
+    requirement: "Read the complaint scan. Get the customer, vehicle, issue, and request. Compare them with the call.",
     resultSummary: "The scanned complaint matches the customer, vehicle, issue and return request in the call.",
-    decisionImpact: "Confirms that the written complaint supports the same issue and requested resolution used in the recommendation.",
+    decisionImpact: "Confirms the scan and the call describe the same complaint.",
     evidence: {
       kind: "ocr",
       title: "Scanned complaint verification",
@@ -150,15 +150,15 @@ export const optionalReviewAgents: ReviewAgent[] = [
 ];
 
 export const settlementRecommendation = {
-  type: "Recommended resolution",
-  title: "Handle under Three Guarantees with shared commercial compensation",
+  type: "Suggested result",
+  title: "Apply Three Guarantees and share the cost",
   applicability: "Applicable",
   bmwShare: 20,
   dealerShare: 80,
-  summary: "Three Guarantees applies. The TSARA Result confirms a product-origin fault; comparable cases support a commercial compensation allocation of 20% BMW and 80% dealer.",
+  summary: "The same fault remained after three repairs. It comes from the product. Similar cases support BMW 20% and dealer 80%.",
   conclusions: [
-    { id: "coverage", label: "Three Guarantees", value: "Applicable", agentId: "warranty", rationale: "Three repairs for the same unresolved fault meet the repeated-repair threshold." },
-    { id: "origin", label: "Technical fault origin", value: "Product-related", agentId: "technical", rationale: "The TSARA Result identifies a product-origin fault and excludes dealer-induced damage." },
-    { id: "allocation", label: "Recommended compensation", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "Highly comparable Three Guarantees cases consistently use a 20% BMW / 80% dealer commercial allocation." },
+    { id: "coverage", label: "Policy check", value: "Three Guarantees applies", agentId: "warranty", rationale: "The same fault remained after three repairs." },
+    { id: "origin", label: "Fault source", value: "Product issue", agentId: "technical", rationale: "TSARA found a product issue and no dealer-caused damage." },
+    { id: "allocation", label: "Cost share", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "The closest past cases used the same share." },
   ],
 };

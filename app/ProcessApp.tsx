@@ -56,7 +56,7 @@ type ComplaintSource = "call" | "scan";
 const steps = ["Intake", "Review", "Recommendation & Decision", "Execution"];
 
 function createDecisionInstruction() {
-  return `Confirm this case as eligible under the Three Guarantees policy. Allocate the commercial compensation cost at BMW ${settlementRecommendation.bmwShare}% and dealer ${settlementRecommendation.dealerShare}%. Record the decision with the supporting Agent evidence, prepare the settlement instruction for the dealer, and close the case after the instruction is issued.`;
+  return `Apply Three Guarantees to this case. Set the cost share at BMW ${settlementRecommendation.bmwShare}% and dealer ${settlementRecommendation.dealerShare}%. Save the decision and Agent evidence in CCO, complete the approval, and close the case.`;
 }
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
@@ -81,11 +81,6 @@ function StreamedLine({ line, visibleCharacters, corrected }: { line: Conversati
     const visibleText = part.text.slice(0, availableCharacters);
     return part.semantic ? <mark className={`${part.semantic}-mark`} key={index}>{visibleText}</mark> : <span key={index}>{visibleText}</span>;
   })}</>;
-}
-
-function CompletionActionIcon({ index }: { index: number }) {
-  const Icon = [CheckSquare, UploadSimple, Paperclip, ChatText][index] ?? CheckCircle;
-  return <span className="completion-icon" aria-hidden="true"><Icon size={17} weight="regular" /></span>;
 }
 
 export default function ProcessApp() {
@@ -123,7 +118,7 @@ export default function ProcessApp() {
   };
 
   const completeCase = () => {
-    setCaseCompleted(true);
+    setCaseCompleted(false);
     setStage(4);
   };
 
@@ -168,7 +163,7 @@ export default function ProcessApp() {
             />
           )}
           {stage === 3 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(2)} onConfirm={completeCase} />}
-          {stage === 4 && <CompletionScreen instruction={decisionInstruction} onWorkbench={backToWorkbench} />}
+          {stage === 4 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
@@ -243,7 +238,7 @@ function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: 
     timeline[0].done ? "Complaint captured" : "Current step",
     reviewStatus,
     stage > 3 ? "Decision submitted" : stage === 3 ? "Human decision" : "Pending",
-    timeline[5].done ? "Case completed" : stage === 4 ? "Current step" : "Pending",
+    timeline[5].done ? "Case completed" : stage === 4 ? "Automation running" : "Pending",
   ];
   return (
     <nav className="stepper compact" aria-label="Case progress">
@@ -405,7 +400,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
 
   return (
     <section className="screen-panel intake-screen">
-      <div className="screen-heading"><div><p className="section-kicker">ORIGINAL COMPLAINT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
+      <div className="screen-heading"><div><p className="section-kicker">CIC AGENT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
@@ -487,7 +482,7 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
 function AgentEvidence({ evidence }: { evidence: EvidenceBlock }) {
   return (
     <section className="inline-evidence">
-      <div className="inline-evidence-heading"><div><p>AGENT EVIDENCE</p><h4>{evidence.title}</h4></div><span><CheckCircle size={15} weight="fill" />Query completed</span></div>
+      <div className="inline-evidence-heading"><div><p>EVIDENCE</p><h4>{evidence.title}</h4></div><span><CheckCircle size={15} weight="fill" />Done</span></div>
       <p className="evidence-explanation">{evidence.summary}</p>
       {evidence.kind === "records" && <div className="evidence-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.record}><span>{row.date}</span><strong>{row.record}</strong><p>{row.finding}</p>{row.highlight && <b>Eligibility evidence</b>}</div>)}</div>}
       {evidence.kind === "diagnosis" && <div className="diagnosis-document">{evidence.documents.map((document) => <article key={document.title}><header><FileText size={18} /><strong>{document.title}</strong><span>{document.date}</span></header>{document.statements.map((statement) => <p className={statement.highlight ? "highlight" : ""} key={statement.text}>{statement.highlight && <CheckCircle size={16} weight="fill" />}{statement.text}</p>)}</article>)}</div>}
@@ -560,21 +555,21 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
   };
 
   const activeAgent = agents[runCursor];
-  const runMessage = runCursor >= agents.length ? "All evidence received. Customer Care is consolidating the findings." : runPhase === "request" ? `Sending the review request to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is querying its business source…` : `${activeAgent?.name} is returning evidence to Customer Care…`;
+  const runMessage = runCursor >= agents.length ? "All results are back. A7 is preparing the report." : runPhase === "request" ? `Sending a task to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is checking its source…` : `${activeAgent?.name} is sending the result to A7…`;
 
   return (
     <section className="screen-panel review-plan-screen">
-      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>{state === "results" ? "Agent Review Results" : state === "running" ? "Executing Review Plan" : "Review Plan"}</h2></div>{accessGranted ? <span className="success-pill">Access allowed</span> : <span className="ai-plan-badge"><MagicWand size={16} />AI-generated plan</span>}</div>
+      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>{state === "results" ? "Review Results" : state === "running" ? "Running Review" : "Review Plan"}</h2></div>{accessGranted ? <span className="success-pill">Access allowed</span> : <span className="ai-plan-badge"><MagicWand size={16} />AI-made plan</span>}</div>
 
       {state === "plan" && <section className="plan-rationale">
         <div className="rationale-icon"><MagicWand size={22} /></div>
-        <div><span>AI RECOMMENDATION</span><h3>{reviewPlanContext.recommendation}</h3><button onClick={() => setContextOpen(!contextOpen)}><Eye size={16} />{contextOpen ? "Hide complaint evidence" : "View referenced evidence"}</button></div>
+        <div><span>AI SUGGESTION</span><h3>{reviewPlanContext.recommendation}</h3><button onClick={() => setContextOpen(!contextOpen)}><Eye size={16} />{contextOpen ? "Hide sources" : "Open sources"}</button></div>
         {contextOpen && <div className="plan-context-evidence">{reviewPlanContext.evidence.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>From complaint intake</small></div>)}</div>}
       </section>}
 
       {(state === "running" || state === "results") && (
         <section className={`agent-network ${state}`} aria-label="Customer Care agent orchestration">
-          <header className="network-heading"><div><span>AGENT COLLABORATION</span><h3>{state === "running" ? "Customer Care is coordinating the review" : "All Agent results returned"}</h3><p>{state === "running" ? "A7 sends one business request at a time and receives the result before continuing." : "Select Evidence on any Agent to review its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Live execution</> : <><CheckCircle size={16} weight="fill" />Review complete</>}</span></header>
+          <header className="network-heading"><div><span>AGENTS AT WORK</span><h3>{state === "running" ? "A7 is running the review" : "All results are ready"}</h3><p>{state === "running" ? "A7 sends each task and waits for the result." : "Open any Agent to see its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Working</> : <><CheckCircle size={16} weight="fill" />Done</>}</span></header>
           <div className="network-canvas">
             <div className="planner-robot">
               <div className="robot-avatar planner" aria-hidden="true"><Robot size={72} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
@@ -602,7 +597,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
         </section>
       )}
 
-      {state === "plan" && <div className="action-plan-heading"><div><p>RECOMMENDED ACTION PLAN</p><h3>{agents.length} review steps</h3><span>Open any step to review or edit the AI-generated requirement.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
+      {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
       {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name, source and request.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "parts" ? "Data Agent" : "OCR Agent"}<small>{agent.category === "parts" ? "Connect a data source and define a query" : "Read and validate complaint documents"}</small></strong><Plus size={18} /></button>)}</section>}
 
@@ -620,13 +615,13 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 <span className="card-status">Ready</span>
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
-              {expanded && <div className="agent-card-body"><div className="agent-config-grid"><label><span><PencilSimple size={15} />Agent name <b>Editable</b></span><input aria-label={`${agent.name} name`} value={agent.name} onChange={(event) => updateAgent(agent.id, { name: event.target.value })} /></label><label><span><Database size={15} />Source system <b>Editable</b></span><input aria-label={`${agent.name} source system`} value={agent.system} onChange={(event) => updateAgent(agent.id, { system: event.target.value })} /></label></div><label><span><PencilSimple size={15} />Instructions for this Agent <b>AI generated · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateAgent(agent.id, { requirement: event.target.value })} /></label></div>}
+              {expanded && <div className="agent-card-body"><div className="agent-config-grid"><label><span><PencilSimple size={15} />Agent name <b>Editable</b></span><input aria-label={`${agent.name} name`} value={agent.name} onChange={(event) => updateAgent(agent.id, { name: event.target.value })} /></label><label><span><Database size={15} />Source system <b>Editable</b></span><input aria-label={`${agent.name} source system`} value={agent.system} onChange={(event) => updateAgent(agent.id, { system: event.target.value })} /></label></div><label><span><PencilSimple size={15} />Agent task <b>AI draft · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateAgent(agent.id, { requirement: event.target.value })} /></label></div>}
             </article>
           );
         })}
       </div>}
 
-      <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "You can edit the plan before granting access." : state === "running" ? runMessage : `${agents.length} of ${agents.length} Agent requests completed.`}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Review Access &amp; Run Plan</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Replan Agents</button><button className="primary-button wide button-with-icon" onClick={onNext}>Prepare Recommendation<ArrowRight size={18} /></button></div>}</div>
+      <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "You can edit the plan before allowing access." : state === "running" ? runMessage : `${agents.length} of ${agents.length} Agent tasks are done.`}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Check Access &amp; Run</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button><button className="primary-button wide button-with-icon" onClick={onNext}>Create Report<ArrowRight size={18} /></button></div>}</div>
     </section>
   );
 }
@@ -634,39 +629,93 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 function RecommendationScreen({ agents, instruction, setInstruction, onEvidence, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onEvidence: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
   return (
     <section className="screen-panel recommendation-screen">
-      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7)</p><h2>Recommendation &amp; Decision</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on {agents.length} Agent results</span></div>
-      <section className="recommendation-outcome" aria-label="AI-generated handling recommendation">
-        <div className="decision-ai-icon" aria-hidden="true"><MagicWand size={24} weight="duotone" /></div>
-        <div><span>AI-GENERATED {settlementRecommendation.type.toUpperCase()}</span><h3>{settlementRecommendation.title}</h3><p>{settlementRecommendation.summary}</p></div>
-        <small>Generated for this case</small>
-      </section>
-      <div className="recommendation-conclusions">
-        {settlementRecommendation.conclusions.map((conclusion) => {
-          const agent = agents.find((item) => item.id === conclusion.agentId) ?? recommendedReviewAgents.find((item) => item.id === conclusion.agentId)!;
-          return <article key={conclusion.id}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><div><small>{conclusion.label}</small><strong>{conclusion.value}</strong><p>{conclusion.rationale}</p></div><button onClick={() => onEvidence(agent.id)}><Eye size={16} /><span>View Agent Evidence</span><small>{agent.name} · {agent.system}</small><CaretRight size={16} /></button></article>;
-        })}
-      </div>
-      <section className="decision-instruction">
-        <header><div><span>HUMAN DECISION</span><h3>Enter the final decision in natural language</h3><p>Use the AI-generated recommendation and its evidence as a reference. The decision can be edited for this case.</p></div></header>
-        <label htmlFor="decision-instruction"><span>Decision <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
-      </section>
-      <div className="prepared-by"><User size={19} aria-hidden="true" /><span>AI recommendation prepared by Customer Care</span><RoleBadge>Planner</RoleBadge></div>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim()} onClick={onConfirm}><CheckCircle size={18} />Submit Decision &amp; Close</button></div>
+      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>Recommendation &amp; Decision</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Report from {agents.length} Agent results</span></div>
+      <article className="case-report">
+        <header className="report-header">
+          <div><span>CASE HANDLING REPORT</span><h3>{caseData.id}</h3><p>Prepared by A7 Planner · 18 Aug 2026</p></div>
+          <div className="report-status"><CheckCircle size={20} weight="fill" /><span>Ready for decision</span></div>
+        </header>
+
+        <section className="report-section report-suggestion" aria-label="AI suggestion">
+          <div className="report-section-number">01</div>
+          <div><span>AI SUGGESTION</span><h3>{settlementRecommendation.title}</h3><p>{settlementRecommendation.summary}</p></div>
+        </section>
+
+        <section className="report-section report-key-evidence" aria-label="Key evidence">
+          <div className="report-section-number">02</div>
+          <div className="report-section-body">
+            <span>KEY EVIDENCE</span>
+            <h3>Why the AI made this suggestion</h3>
+            <div className="report-findings">
+              {settlementRecommendation.conclusions.map((conclusion) => {
+                const agent = agents.find((item) => item.id === conclusion.agentId) ?? recommendedReviewAgents.find((item) => item.id === conclusion.agentId)!;
+                return <article key={conclusion.id}><span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} /></span><div><small>{conclusion.label}</small><strong>{conclusion.value}</strong><p>{conclusion.rationale}</p></div><button onClick={() => onEvidence(agent.id)}><Eye size={16} />Open source</button></article>;
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="report-agent-results">
+          <div><span>FULL RESULTS</span><h3>Open results by Agent</h3><p>Use this when you need every source record from the review.</p></div>
+          <div>{agents.map((agent) => <button key={agent.id} onClick={() => onEvidence(agent.id)}><span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} /></span><span><strong>{agent.name}</strong><small>{agent.system} · {agent.role}</small></span><CaretRight size={17} /></button>)}</div>
+        </section>
+
+        <section className="report-section report-decision">
+          <div className="report-section-number">03</div>
+          <div className="report-section-body"><span>HUMAN DECISION</span><h3>Write the final decision</h3><p>You can use the AI draft or change it for this case.</p><label htmlFor="decision-instruction"><span>Decision <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label></div>
+        </section>
+      </article>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim()} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div>
     </section>
   );
 }
 
-function CompletionScreen({ instruction, onWorkbench }: { instruction: string; onWorkbench: () => void }) {
-  const actions = ["Human decision recorded", "Agent evidence attached to the decision", "BMW/dealer settlement instruction prepared", "Customer Care case closed"];
+function ExecutionScreen({ instruction, completed, onComplete, onWorkbench }: { instruction: string; completed: boolean; onComplete: (complete: boolean) => void; onWorkbench: () => void }) {
+  const [phase, setPhase] = useState(completed ? 4 : 0);
+  const actions = [
+    { title: "Receive final decision", detail: "A7 sends the decision and the evidence list." },
+    { title: "Upload case files", detail: "The Execution Agent uploads the report and source records to CCO." },
+    { title: "Complete CCO approval", detail: "The Execution Agent enters the decision and approves the case in CCO." },
+    { title: "Return the CCO record", detail: "CCO returns approval ID CCO-2026-0088." },
+  ];
+
+  useEffect(() => {
+    if (completed || phase >= actions.length) {
+      if (!completed) onComplete(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setPhase((current) => current + 1), phase === 0 ? 1200 : 1550);
+    return () => window.clearTimeout(timer);
+  }, [actions.length, completed, onComplete, phase]);
+
+  const currentMessage = completed || phase >= actions.length ? "CCO approval is complete." : actions[phase].detail;
   return (
-    <section className="screen-panel completion-screen">
-      <div className="screen-heading"><div><p className="section-kicker">EXECUTION</p><h2>Case Completed</h2></div></div>
-      <div className="success-banner"><span><Check size={20} weight="bold" /></span><strong>Success</strong><p>The human decision was recorded and the case was closed.</p></div>
-      <section className="approved-instruction"><span>APPROVED HUMAN INSTRUCTION</span><p>{instruction}</p></section>
-      <h3 className="subheading">Actions completed</h3>
-      <div className="completed-actions">{actions.map((action, index) => <p key={action}><CompletionActionIcon index={index} />{action}</p>)}</div>
-      <div className="case-record"><span>Case record</span><strong><FolderOpen size={19} aria-hidden="true" />Customer Care Case</strong><b>{caseData.id}</b></div>
-      <div className="screen-actions completion-actions"><span>Status: <b>Completed</b></span><button className="primary-button wide button-with-icon" onClick={onWorkbench}><ArrowLeft size={18} aria-hidden="true" />Back to Workbench</button></div>
+    <section className="screen-panel execution-screen">
+      <div className="screen-heading"><div><p className="section-kicker">EXECUTION</p><h2>{completed ? "Case Completed" : "Completing the Case"}</h2></div><span className={completed ? "success-pill" : "network-live"}>{completed ? <><CheckCircle size={16} weight="fill" />Done</> : <><span />Working</>}</span></div>
+      <section className="execution-network" aria-label="A7 Planner sends the final decision to the Execution and Automation Agent, which operates the CCO system">
+        <header><span>LIVE EXECUTION</span><h3>A7 sends the decision to CCO through the Execution Agent</h3><p>CCO is an existing business system. The Agent uploads files and completes the approval in it.</p></header>
+        <div className="execution-flow">
+          <div className={`execution-node agent-node ${phase > 0 ? "done" : "active"}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>A7 Planner</strong><em>Planner Agent</em><small>BBS-A-7</small></div>
+          <div className={`execution-link ${phase === 0 ? "active" : phase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 0 ? "SENDING DECISION" : "DECISION SENT"}</b></div>
+          <div className={`execution-node agent-node ${phase > 2 ? "done" : phase > 0 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><UploadSimple size={18} weight="bold" /></span></div><strong>Execution &amp; Automation</strong><em>Execution Agent</em><small>Uploads files · operates CCO</small></div>
+          <div className={`execution-link ${phase > 0 && phase < 4 ? "active" : phase >= 4 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 4 ? "APPROVAL RETURNED" : phase > 0 ? "WORKING IN CCO" : "WAITING"}</b></div>
+          <div className={`cco-system ${phase >= 4 ? "done" : phase > 1 ? "active" : ""}`}><div className="system-window"><span /><span /><span /><SquaresFour size={34} weight="duotone" /></div><strong>CCO</strong><em>Existing system</em><small>Case approval</small></div>
+        </div>
+        <p className="execution-status" role="status" aria-live="polite"><span className={completed ? "map-check" : "spinner"}>{completed && <Check size={12} weight="bold" />}</span>{currentMessage}</p>
+      </section>
+
+      <div className="execution-detail-grid">
+        <section className="execution-package"><header><span>FILES SENT TO CCO</span><h3>Case package</h3></header>{[
+          { label: "Final decision", icon: FileText },
+          { label: "Agent evidence", icon: Paperclip },
+          { label: "Case history", icon: FolderOpen },
+        ].map((item, index) => { const Icon = item.icon; const done = phase > index; return <div key={item.label} className={done ? "done" : phase === index ? "active" : ""}><Icon size={20} /><span>{item.label}</span><b>{done ? "Uploaded" : phase === index ? "Uploading" : "Ready"}</b></div>; })}</section>
+        <section className="cco-actions"><header><span>CCO ACTIONS</span><h3>Approval steps</h3></header>{["Open case", "Upload files", "Enter final decision", "Approve case"].map((action, index) => <div className={phase > index ? "done" : phase === index ? "active" : ""} key={action}><span>{phase > index ? <Check size={14} weight="bold" /> : index + 1}</span><strong>{action}</strong><small>{phase > index ? "Done" : phase === index ? "In progress" : "Waiting"}</small></div>)}</section>
+      </div>
+
+      <section className="execution-instruction"><span>FINAL DECISION</span><p>{instruction}</p></section>
+      {completed && <section className="execution-complete"><CheckCircle size={28} weight="fill" /><div><strong>CCO approval complete</strong><span>Approval ID: CCO-2026-0088 · Case {caseData.id} is closed</span></div></section>}
+      <div className="screen-actions completion-actions"><span>Status: <b>{completed ? "Completed" : "In progress"}</b></span><button className="primary-button wide button-with-icon" disabled={!completed} onClick={onWorkbench}><ArrowLeft size={18} aria-hidden="true" />Back to Workbench</button></div>
     </section>
   );
 }
@@ -674,7 +723,7 @@ function CompletionScreen({ instruction, onWorkbench }: { instruction: string; o
 function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onCancel: () => void; onAllow: () => void }) {
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Review Selected Agent Access</h2><p className="modal-intro">Customer Care will send the following case-specific requests.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name} {agent.system !== "Enterprise Knowledge" ? `(${agent.system})` : ""}</strong><RoleBadge>{agent.role}</RoleBadge><span>{agent.purpose}</span></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><Clock size={18} aria-hidden="true" />{caseData.access.duration}</span></div><p>Access expires automatically after this review plan completes.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run Plan</button></div></section>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Check Agent Access</h2><p className="modal-intro">A7 will send these case tasks.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name} {agent.system !== "Enterprise Knowledge" ? `(${agent.system})` : ""}</strong><RoleBadge>{agent.role}</RoleBadge><span>{agent.purpose}</span></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><Clock size={18} aria-hidden="true" />{caseData.access.duration}</span></div><p>Access ends when this review is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
     </div>
   );
 }
@@ -684,9 +733,9 @@ function RecommendationEvidenceDrawer({ agent, returnLabel, onClose }: { agent: 
   return (
     <div className="overlay drawer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="drawer recommendation-evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-        <div className="drawer-heading"><div><p className="section-kicker">RECOMMENDATION EVIDENCE</p><h2 id="drawer-title"><ReviewAgentIcon category={agent.category} size={25} />{agent.evidence.title}</h2><span>{agent.name} · {agent.system} · {agent.role}</span></div><button className="close-button" aria-label="Close evidence" onClick={onClose}><X size={22} /></button></div>
-        {conclusion && <section className="decision-linkage"><span>CONCLUSION SUPPORTED</span><div><strong>{conclusion.label}</strong><b>{conclusion.value}</b></div><p>{conclusion.rationale}</p></section>}
-        <section className="evidence-query-detail"><div><span>REQUEST SENT TO AGENT</span><p>{agent.requirement}</p></div><div><span>AGENT RESULT</span><p>{agent.resultSummary}</p></div><div><span>IMPACT ON DECISION</span><p>{agent.decisionImpact}</p></div></section>
+        <div className="drawer-heading"><div><p className="section-kicker">EVIDENCE</p><h2 id="drawer-title"><ReviewAgentIcon category={agent.category} size={25} />{agent.evidence.title}</h2><span>{agent.name} · {agent.system} · {agent.role}</span></div><button className="close-button" aria-label="Close evidence" onClick={onClose}><X size={22} /></button></div>
+        {conclusion && <section className="decision-linkage"><span>SUPPORTS</span><div><strong>{conclusion.label}</strong><b>{conclusion.value}</b></div><p>{conclusion.rationale}</p></section>}
+        <section className="evidence-query-detail"><div><span>TASK</span><p>{agent.requirement}</p></div><div><span>RESULT</span><p>{agent.resultSummary}</p></div><div><span>WHY IT MATTERS</span><p>{agent.decisionImpact}</p></div></section>
         <AgentEvidence evidence={agent.evidence} />
         <section className="evidence-audit"><div><span>Source system</span><strong>{agent.system}</strong></div><div><span>Case scope</span><strong>{caseData.id} · VIN {caseData.vin}</strong></div><div><span>Retrieved</span><strong>18 Aug 2026 · 14:32</strong></div><div><span>Access</span><strong>Read only · Case specific</strong></div></section>
         <div className="drawer-footer"><button className="primary-button wide button-with-icon" onClick={onClose}><ArrowLeft size={18} />{returnLabel}</button></div>
