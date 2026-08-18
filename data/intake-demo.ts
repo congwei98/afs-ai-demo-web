@@ -1,4 +1,4 @@
-export type SemanticType = "quality" | "request" | "emotion";
+export type SemanticType = "reason" | "repair" | "request" | "sentiment" | "outcome";
 
 export type ConversationLine = {
   id: string;
@@ -7,20 +7,22 @@ export type ConversationLine = {
   parts: Array<{ text: string; semantic?: SemanticType; correction?: { before: string; after: string } }>;
 };
 
+export type CallInsight = {
+  key: SemanticType;
+  label: string;
+  value: string;
+  evidenceId?: string;
+  evidenceTime?: string;
+};
+
 export type HistoricalCall = {
   id: string;
   sequence: number;
   date: string;
   duration: string;
-  title: string;
-  relationship: string;
-  conversation: Array<{ speaker: "Customer" | "Customer Care"; time: string; text: string }>;
-  summary: {
-    reason: string;
-    outcome: string;
-    sentiment: string;
-    continuity: string;
-  };
+  conversation: ConversationLine[];
+  narrative: string;
+  insights: CallInsight[];
 };
 
 export const historicalCalls: HistoricalCall[] = [
@@ -29,120 +31,78 @@ export const historicalCalls: HistoricalCall[] = [
     sequence: 1,
     date: "18 Oct 2025",
     duration: "02:18",
-    title: "Initial power-loss report",
-    relationship: "First occurrence · Repair visit 1 arranged",
     conversation: [
-      { speaker: "Customer", time: "00:08", text: "The vehicle briefly lost power when I accelerated onto the main road. It recovered after I restarted it, but I would like it checked." },
-      { speaker: "Customer Care", time: "00:31", text: "I have recorded this as the first power-loss incident and will arrange a diagnostic appointment with the dealer." },
-      { speaker: "Customer", time: "00:48", text: "That is fine. I am concerned, but I hope it is only a software issue." },
-      { speaker: "Customer Care", time: "01:04", text: "The dealer will inspect the power-control system and update you after the first repair visit." },
+      { id: "call1-reason", speaker: "Customer", time: "00:08", parts: [{ text: "The vehicle briefly " }, { text: "lost power when I accelerated onto the main road", semantic: "reason" }, { text: ". It recovered after I restarted it, but " }, { text: "I would like it checked", semantic: "request" }, { text: "." }] },
+      { id: "call1-outcome", speaker: "Customer Care", time: "00:31", parts: [{ text: "I have recorded this as the first power-loss incident and will " }, { text: "arrange a diagnostic appointment with the dealer", semantic: "outcome" }, { text: "." }] },
+      { id: "call1-sentiment", speaker: "Customer", time: "00:48", parts: [{ text: "That is fine. " }, { text: "I am concerned", semantic: "sentiment" }, { text: ", but I hope it is only a software issue." }] },
+      { id: "call1-repair", speaker: "Customer Care", time: "01:04", parts: [{ text: "The dealer will " }, { text: "inspect the power-control system during the first repair visit", semantic: "repair" }, { text: " and update you afterwards." }] },
     ],
-    summary: {
-      reason: "First intermittent loss-of-power incident",
-      outcome: "Diagnostic appointment and repair visit 1 arranged",
-      sentiment: "Concerned, cooperative",
-      continuity: "Established the first occurrence later referenced in the repeated-repair complaint",
-    },
+    narrative: "The customer reported the first intermittent power-loss incident. Customer Care recorded the issue and arranged the first diagnostic visit; the customer remained concerned but cooperative.",
+    insights: [
+      { key: "reason", label: "Contact reason", value: "First intermittent loss-of-power incident", evidenceId: "call1-reason", evidenceTime: "00:08" },
+      { key: "repair", label: "Repair history", value: "No previous repair; visit 1 arranged", evidenceId: "call1-repair", evidenceTime: "01:04" },
+      { key: "request", label: "Customer request", value: "Vehicle inspection", evidenceId: "call1-reason", evidenceTime: "00:08" },
+      { key: "sentiment", label: "Customer sentiment", value: "Concerned, cooperative", evidenceId: "call1-sentiment", evidenceTime: "00:48" },
+      { key: "outcome", label: "Handling outcome", value: "Diagnostic appointment arranged", evidenceId: "call1-outcome", evidenceTime: "00:31" },
+    ],
   },
   {
     id: "call-2025-12-03",
     sequence: 2,
     date: "03 Dec 2025",
     duration: "03:06",
-    title: "Fault returned after first repair",
-    relationship: "Same symptom · Repair visit 2 arranged",
     conversation: [
-      { speaker: "Customer", time: "00:06", text: "The same loss-of-power problem returned yesterday, even though the dealer completed the software reset in October." },
-      { speaker: "Customer Care", time: "00:28", text: "I can see the October repair order. I will link this call to the same fault and arrange the second repair visit." },
-      { speaker: "Customer", time: "00:53", text: "Please make sure the underlying cause is found this time. I use the car every day and cannot keep returning to the workshop." },
-      { speaker: "Customer Care", time: "01:19", text: "The dealer will perform an extended diagnosis and inspect the control unit rather than repeat the same reset." },
+      { id: "call2-reason", speaker: "Customer", time: "00:06", parts: [{ text: "The " }, { text: "same loss-of-power problem returned yesterday", semantic: "reason" }, { text: ", even though the dealer completed the software reset in October." }] },
+      { id: "call2-repair", speaker: "Customer Care", time: "00:28", parts: [{ text: "I can see the " }, { text: "October repair order and software reset", semantic: "repair" }, { text: ". I will link this call to the same fault." }] },
+      { id: "call2-request", speaker: "Customer", time: "00:53", parts: [{ text: "Please " }, { text: "make sure the underlying cause is found this time", semantic: "request" }, { text: ". I use the car every day and " }, { text: "cannot keep returning to the workshop", semantic: "sentiment" }, { text: "." }] },
+      { id: "call2-outcome", speaker: "Customer Care", time: "01:19", parts: [{ text: "The dealer will " }, { text: "perform an extended diagnosis and inspect the control unit", semantic: "outcome" }, { text: " during repair visit 2." }] },
     ],
-    summary: {
-      reason: "Same power-loss symptom returned after repair visit 1",
-      outcome: "Linked recurrence created; repair visit 2 arranged",
-      sentiment: "Frustration beginning to increase",
-      continuity: "Confirmed the issue was recurring rather than a new unrelated complaint",
-    },
+    narrative: "The same fault returned after the first software reset. AI linked the contact to the existing case, identified increasing frustration, and captured the plan for an extended diagnosis during repair visit 2.",
+    insights: [
+      { key: "reason", label: "Contact reason", value: "Power loss returned after repair visit 1", evidenceId: "call2-reason", evidenceTime: "00:06" },
+      { key: "repair", label: "Repair history", value: "1 visit; software reset completed", evidenceId: "call2-repair", evidenceTime: "00:28" },
+      { key: "request", label: "Customer request", value: "Identify and resolve the root cause", evidenceId: "call2-request", evidenceTime: "00:53" },
+      { key: "sentiment", label: "Customer sentiment", value: "Frustration increasing", evidenceId: "call2-request", evidenceTime: "00:53" },
+      { key: "outcome", label: "Handling outcome", value: "Repair visit 2 and extended diagnosis arranged", evidenceId: "call2-outcome", evidenceTime: "01:19" },
+    ],
   },
   {
     id: "call-2026-02-12",
     sequence: 3,
     date: "12 Feb 2026",
     duration: "03:24",
-    title: "Escalation after second repair",
-    relationship: "Second recurrence · Repair visit 3 completed",
     conversation: [
-      { speaker: "Customer", time: "00:09", text: "The vehicle lost power again after the control unit replacement. This is now the third time I have reported the same problem." },
-      { speaker: "Customer Care", time: "00:34", text: "The first two repair records are linked. I will escalate the recurring fault and arrange a third repair visit with Technical Service support." },
-      { speaker: "Customer", time: "01:02", text: "I will allow one more repair, but if the problem comes back I will ask for a formal Three Guarantees resolution." },
-      { speaker: "Customer Care", time: "01:31", text: "I have documented that expectation and the safety concern. The next contact will reference all three linked repair attempts." },
+      { id: "call3-reason", speaker: "Customer", time: "00:09", parts: [{ text: "The vehicle " }, { text: "lost power again after the control unit replacement", semantic: "reason" }, { text: ". This is now the third time I have reported the same problem." }] },
+      { id: "call3-repair", speaker: "Customer Care", time: "00:34", parts: [{ text: "The " }, { text: "first two repair records are linked", semantic: "repair" }, { text: ". I will escalate the recurring fault." }] },
+      { id: "call3-request", speaker: "Customer", time: "01:02", parts: [{ text: "I will allow one more repair, but " }, { text: "if the problem comes back I will ask for a formal Three Guarantees resolution", semantic: "request" }, { text: "." }] },
+      { id: "call3-outcome", speaker: "Customer Care", time: "01:31", parts: [{ text: "I have documented the expectation and " }, { text: "safety concern", semantic: "sentiment" }, { text: ". " }, { text: "Repair visit 3 will be arranged with Technical Service support", semantic: "outcome" }, { text: "." }] },
     ],
-    summary: {
-      reason: "Power loss returned after repair visit 2 and control-unit replacement",
-      outcome: "Technical escalation and repair visit 3 completed",
-      sentiment: "Strong frustration and explicit safety concern",
-      continuity: "Customer stated the next recurrence should trigger formal Three Guarantees handling",
-    },
+    narrative: "After the second repair, the fault returned again. The customer accepted one final repair but explicitly stated that another recurrence should trigger formal Three Guarantees handling.",
+    insights: [
+      { key: "reason", label: "Contact reason", value: "Power loss returned after repair visit 2", evidenceId: "call3-reason", evidenceTime: "00:09" },
+      { key: "repair", label: "Repair history", value: "2 linked visits; control unit replaced", evidenceId: "call3-repair", evidenceTime: "00:34" },
+      { key: "request", label: "Customer request", value: "One final repair, then formal resolution", evidenceId: "call3-request", evidenceTime: "01:02" },
+      { key: "sentiment", label: "Customer sentiment", value: "Strong frustration and safety concern", evidenceId: "call3-outcome", evidenceTime: "01:31" },
+      { key: "outcome", label: "Handling outcome", value: "Repair visit 3 with Technical Service arranged", evidenceId: "call3-outcome", evidenceTime: "01:31" },
+    ],
   },
 ];
 
 export const intakeDemo = {
   conversation: [
-    {
-      id: "opening",
-      speaker: "Customer Care",
-      time: "00:03",
-      parts: [{ text: "Good morning. Please tell me what happened with your vehicle." }],
-    },
-    {
-      id: "issue",
-      speaker: "Customer",
-      time: "00:12",
-      parts: [
-        { text: "It " },
-        { text: "lost power again while I was driving", semantic: "quality" },
-        { text: ". I have brought it in " },
-        { text: "—but the same issue came back.", correction: { before: "twice", after: "sorry, three times" } },
-      ],
-    },
-    {
-      id: "clarify",
-      speaker: "Customer Care",
-      time: "00:27",
-      parts: [{ text: "To confirm: the vehicle has had three repair visits for the same loss-of-power issue?" }],
-    },
-    {
-      id: "emotion",
-      speaker: "Customer",
-      time: "00:35",
-      parts: [
-        { text: "Yes. I am " },
-        { text: "very frustrated, and I no longer feel safe driving it", semantic: "emotion" },
-        { text: "." },
-      ],
-    },
-    {
-      id: "ask",
-      speaker: "Customer Care",
-      time: "00:46",
-      parts: [{ text: "What outcome would you like us to arrange?" }],
-    },
-    {
-      id: "request",
-      speaker: "Customer",
-      time: "00:52",
-      parts: [
-        { text: "I want BMW to " },
-        { text: "accept a vehicle return under the Three Guarantees policy", semantic: "request" },
-        { text: "." },
-      ],
-    },
+    { id: "opening", speaker: "Customer Care", time: "00:03", parts: [{ text: "Good morning. Please tell me what happened with your vehicle." }] },
+    { id: "issue", speaker: "Customer", time: "00:12", parts: [{ text: "It " }, { text: "lost power again while I was driving", semantic: "reason" }, { text: ". I have brought it in ", semantic: "repair" }, { text: "—but the same issue came back.", correction: { before: "twice", after: "sorry, three times" } }] },
+    { id: "clarify", speaker: "Customer Care", time: "00:27", parts: [{ text: "To confirm: the vehicle has had " }, { text: "three repair visits for the same loss-of-power issue", semantic: "repair" }, { text: "?" }] },
+    { id: "emotion", speaker: "Customer", time: "00:35", parts: [{ text: "Yes. I am " }, { text: "very frustrated, and I no longer feel safe driving it", semantic: "sentiment" }, { text: "." }] },
+    { id: "ask", speaker: "Customer Care", time: "00:46", parts: [{ text: "What outcome would you like us to arrange?" }] },
+    { id: "request", speaker: "Customer", time: "00:52", parts: [{ text: "I want BMW to " }, { text: "accept a vehicle return under the Three Guarantees policy", semantic: "request" }, { text: "." }] },
   ] satisfies ConversationLine[],
-  consolidatedStatement:
-    "The vehicle repeatedly lost power despite three repair visits. The customer feels unsafe driving it and requests a vehicle return under the Three Guarantees policy.",
-  summary: [
-    { label: "Complaint reason", value: "Recurring loss of power after repeated repairs", evidenceId: "issue", evidenceTime: "00:12" },
-    { label: "Customer request", value: "Vehicle return under Three Guarantees", evidenceId: "request", evidenceTime: "00:52" },
-    { label: "Customer sentiment", value: "Frustrated with a stated safety concern", evidenceId: "emotion", evidenceTime: "00:35" },
-  ],
+  narrative: "The same loss-of-power fault returned after three repair visits. The customer now feels unsafe driving the vehicle and formally requests a vehicle return under the Three Guarantees policy.",
+  insights: [
+    { key: "reason", label: "Contact reason", value: "Recurring loss of power", evidenceId: "issue", evidenceTime: "00:12" },
+    { key: "repair", label: "Repair history", value: "3 visits; same fault unresolved", evidenceId: "clarify", evidenceTime: "00:27" },
+    { key: "request", label: "Customer request", value: "Vehicle return under Three Guarantees", evidenceId: "request", evidenceTime: "00:52" },
+    { key: "sentiment", label: "Customer sentiment", value: "Frustrated; safety concern", evidenceId: "emotion", evidenceTime: "00:35" },
+    { key: "outcome", label: "Handling outcome", value: "" },
+  ] satisfies CallInsight[],
 };

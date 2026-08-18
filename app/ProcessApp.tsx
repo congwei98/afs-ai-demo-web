@@ -47,13 +47,13 @@ import {
 } from "@phosphor-icons/react";
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
-import { historicalCalls, intakeDemo, type ConversationLine, type HistoricalCall } from "@/data/intake-demo";
+import { historicalCalls, intakeDemo, type CallInsight, type ConversationLine, type HistoricalCall, type SemanticType } from "@/data/intake-demo";
 import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type EvidenceBlock, type ReviewAgent } from "@/data/review-plan";
 
 type ReviewState = "plan" | "running" | "results";
 type ComplaintSource = "call" | "scan";
 
-const steps = ["Intake", "Review", "Recommendation", "Decision", "Execution"];
+const steps = ["Intake", "Review", "Recommendation & Decision", "Execution"];
 
 function createDecisionInstruction() {
   return `Confirm this case as eligible under the Three Guarantees policy. Allocate the commercial compensation cost at BMW ${settlementRecommendation.bmwShare}% and dealer ${settlementRecommendation.dealerShare}%. Record the decision with the supporting Agent evidence, prepare the settlement instruction for the dealer, and close the case after the instruction is issued.`;
@@ -124,7 +124,7 @@ export default function ProcessApp() {
 
   const completeCase = () => {
     setCaseCompleted(true);
-    setStage(5);
+    setStage(4);
   };
 
   const timeline = useMemo(() => {
@@ -133,7 +133,7 @@ export default function ProcessApp() {
       { label: "Review plan prepared", done: stage > 2 || reviewState !== "plan" },
       { label: "Case access allowed", done: accessGranted },
       { label: "Agent review completed", done: reviewState === "results" || stage > 2 },
-      { label: "Recommendation prepared", done: stage > 3 },
+      { label: "Recommendation prepared", done: stage >= 3 },
       { label: "Case completed", done: caseCompleted },
     ];
     const firstPending = events.findIndex((event) => !event.done);
@@ -167,13 +167,12 @@ export default function ProcessApp() {
               onNext={() => setStage(3)}
             />
           )}
-          {stage === 3 && <RecommendationScreen agents={plannedAgents} onEvidence={setRecommendationEvidence} onNext={() => setStage(4)} />}
-          {stage === 4 && <ConfirmationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(3)} onConfirm={completeCase} />}
-          {stage === 5 && <CompletionScreen instruction={decisionInstruction} onWorkbench={backToWorkbench} />}
+          {stage === 3 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(2)} onConfirm={completeCase} />}
+          {stage === 4 && <CompletionScreen instruction={decisionInstruction} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
-      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} returnLabel={stage === 4 ? "Back to Decision" : "Back to Recommendation"} onClose={() => setRecommendationEvidence(null)} />}
+      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} returnLabel={stage === 3 ? "Back to Recommendation & Decision" : "Back to Recommendation"} onClose={() => setRecommendationEvidence(null)} />}
     </main>
   );
 }
@@ -243,9 +242,8 @@ function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: 
   const stageStatuses = [
     timeline[0].done ? "Complaint captured" : "Current step",
     reviewStatus,
-    timeline[4].done ? "Recommendation prepared" : stage === 3 ? "Current step" : "Pending",
-    stage > 4 ? "Decision confirmed" : stage === 4 ? "Human decision" : "Pending",
-    timeline[5].done ? "Case completed" : stage === 5 ? "Current step" : "Pending",
+    stage > 3 ? "Decision submitted" : stage === 3 ? "Human decision" : "Pending",
+    timeline[5].done ? "Case completed" : stage === 4 ? "Current step" : "Pending",
   ];
   return (
     <nav className="stepper compact" aria-label="Case progress">
@@ -269,6 +267,36 @@ function CaseIdentity() {
   );
 }
 
+const insightLabels: Array<{ key: SemanticType; label: string }> = [
+  { key: "reason", label: "Contact reason" },
+  { key: "repair", label: "Repair history" },
+  { key: "request", label: "Customer request" },
+  { key: "sentiment", label: "Customer sentiment" },
+  { key: "outcome", label: "Handling outcome" },
+];
+
+function InsightIcon({ type, size = 20 }: { type: SemanticType; size?: number }) {
+  if (type === "reason") return <WarningCircle size={size} />;
+  if (type === "repair") return <Wrench size={size} />;
+  if (type === "request") return <ClipboardText size={size} />;
+  if (type === "sentiment") return <ChatText size={size} />;
+  return <CheckSquare size={size} />;
+}
+
+function AIUnderstandingPanel({ insights, narrative, revealed, onEvidence, working = false }: { insights: CallInsight[]; narrative: string; revealed: Set<SemanticType>; onEvidence: (id: string) => void; working?: boolean }) {
+  return (
+    <aside className="ai-extraction" aria-label="AI understanding">
+      <div className="extraction-heading"><span><MagicWand size={19} />AI understanding</span><small>{revealed.size} of 5 dimensions</small></div>
+      <div className="insight-list">{insights.map((insight) => {
+        const isRevealed = revealed.has(insight.key);
+        return <article className={`signal-card ${insight.key} ${isRevealed ? "revealed" : ""}`} key={insight.key}><InsightIcon type={insight.key} /><div><span>{insight.label}</span><strong>{isRevealed ? insight.value || "—" : "Listening…"}</strong>{isRevealed && insight.evidenceId && <button onClick={() => onEvidence(insight.evidenceId!)}><Eye size={15} />Evidence · {insight.evidenceTime}</button>}</div></article>;
+      })}</div>
+      {revealed.size === 5 && <div className="understanding-summary"><span>AI SUMMARY</span><p>{narrative}</p></div>}
+      {working && <div className="ai-working"><span /><p><strong>AI is organizing the conversation</strong>Speaker separation, correction and five-dimension analysis</p></div>}
+    </aside>
+  );
+}
+
 function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { source: ComplaintSource; setSource: (value: ComplaintSource) => void; playing: boolean; setPlaying: (value: boolean) => void; onNext: () => void }) {
   const [activeLine, setActiveLine] = useState(0);
   const [visibleCharacters, setVisibleCharacters] = useState(0);
@@ -287,11 +315,17 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
   const progress = complete ? 100 : Math.min(99, ((priorCharacters + visibleCharacters) / totalCharacters) * 100);
   const hasStarted = activeLine > 0 || visibleCharacters > 0 || complete;
   const revealedCount = complete ? conversation.length : hasStarted ? activeLine + 1 : 0;
-  const issueDetected = complete || activeLine > 1 || (activeLine === 1 && visibleCharacters >= 20);
-  const repairDetected = complete || activeLine > 1 || (activeLine === 1 && correctedLines.has("issue"));
-  const emotionDetected = complete || activeLine > 3 || (activeLine === 3 && visibleCharacters >= 22);
+  const reasonDetected = complete || activeLine > 1 || (activeLine === 1 && visibleCharacters >= 20);
+  const repairDetected = complete || activeLine > 2 || (activeLine === 1 && visibleCharacters >= 56);
+  const sentimentDetected = complete || activeLine > 3 || (activeLine === 3 && visibleCharacters >= 22);
   const requestDetected = complete || activeLine > 5 || (activeLine === 5 && visibleCharacters >= 28);
-  const signalCount = [issueDetected, repairDetected, emotionDetected, requestDetected].filter(Boolean).length;
+  const revealedInsights = new Set<SemanticType>([
+    ...(reasonDetected ? ["reason" as const] : []),
+    ...(repairDetected ? ["repair" as const] : []),
+    ...(requestDetected ? ["request" as const] : []),
+    ...(sentimentDetected ? ["sentiment" as const] : []),
+    ...(complete ? ["outcome" as const] : []),
+  ]);
 
   useEffect(() => {
     if (!playing || source !== "call") return;
@@ -376,7 +410,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
       </div>
-      {source === "call" && <section className="call-sequence" aria-label="Related customer call history"><header><div><span>RELATED CONTACT HISTORY</span><h3>How this complaint developed</h3></div><small>3 previous calls linked by AI</small></header><div className="call-sequence-track">{historicalCalls.map((call) => <button key={call.id} className={selectedCallId === call.id ? "active" : ""} onClick={() => selectCall(call.id)}><span>{call.sequence}</span><div><small>{call.date}</small><strong>{call.title}</strong><em>{call.relationship}</em></div></button>)}<button className={`current ${selectedCallId === "current" ? "active" : ""}`} onClick={() => selectCall("current")}><span>4</span><div><small>12 May 2026 · Current</small><strong>Formal Three Guarantees complaint</strong><em>Fault returned after repair visit 3</em></div></button></div></section>}
+      {source === "call" && <section className="call-sequence" aria-label="Related customer call history"><header><div><span>RELATED CONTACT HISTORY</span><h3>4 linked call records</h3></div><small>Chronological order</small></header><div className="call-sequence-track">{historicalCalls.map((call) => <button key={call.id} className={selectedCallId === call.id ? "active" : ""} onClick={() => selectCall(call.id)}><span>{call.sequence}</span><div><small>{call.date}</small><strong>Call record {call.sequence}</strong><em>{call.duration}</em></div></button>)}<button className={`current ${selectedCallId === "current" ? "active" : ""}`} onClick={() => selectCall("current")}><span>4</span><div><small>12 May 2026</small><strong>Call record 4</strong><em>{caseData.complaint.callDuration} · Current</em></div></button></div></section>}
       {source === "call" && selectedCallId === "current" ? (
         <div className="intake-workspace">
           <div className="call-stage">
@@ -392,7 +426,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
             </div>
 
             <div className="live-transcript" aria-busy={playing}>
-              <div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Live transcript</strong></div><div className="semantic-legend"><span className="quality-dot">Quality issue</span><span className="request-dot">Request</span><span className="emotion-dot">Emotion</span></div></div>
+              <div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Live transcript</strong></div><div className="semantic-legend">{insightLabels.map((item) => <span className={`${item.key}-dot`} key={item.key}>{item.label}</span>)}</div></div>
               {!hasStarted && <div className="transcript-empty"><Microphone size={30} /><strong>Play the recording to see AI at work</strong><span>The conversation will be transcribed, corrected and structured in real time.</span></div>}
               <div className="conversation-stream">
                 {conversation.slice(0, revealedCount).map((line, index) => (
@@ -406,24 +440,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
             </div>
           </div>
 
-          <aside className="ai-extraction" aria-label="AI extracted information">
-            <div className="extraction-heading"><span><MagicWand size={18} />AI understanding</span><small>{complete ? "4 fields confirmed" : `${signalCount} signals found`}</small></div>
-            <div className={`signal-card quality ${issueDetected ? "revealed" : ""}`}><WarningCircle size={21} /><div><span>Quality issue</span><strong>{issueDetected ? "Recurring loss of power" : "Listening…"}</strong></div></div>
-            <div className={`signal-card context ${repairDetected ? "revealed" : ""}`}><Wrench size={21} /><div><span>Repair history</span><strong>{repairDetected ? "3 visits · issue recurring" : "Listening…"}</strong></div></div>
-            <div className={`signal-card emotion ${emotionDetected ? "revealed" : ""}`}><ChatText size={21} /><div><span>Customer sentiment</span><strong>{emotionDetected ? "Frustrated · safety concern" : "Listening…"}</strong></div></div>
-            <div className={`signal-card request ${requestDetected ? "revealed" : ""}`}><ClipboardText size={21} /><div><span>Requested resolution</span><strong>{requestDetected ? "Vehicle return" : "Listening…"}</strong></div></div>
-            {playing && <div className="ai-working"><span /><p><strong>AI is organizing the conversation</strong>Speaker separation, correction and intent detection</p></div>}
-          </aside>
-
-          {complete && (
-            <section className="call-summary">
-              <div className="summary-title"><span><CheckCircle size={22} weight="fill" /></span><div><p>AI-GENERATED CALL SUMMARY</p><h3>Complaint ready for review</h3></div><small>Generated from 03:42 recording</small></div>
-              <div className="consolidated-statement"><MagicWand size={19} /><p><strong>Customer statement, organized by AI</strong>{intakeDemo.consolidatedStatement}</p></div>
-              <div className="summary-grid">
-                {intakeDemo.summary.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><button onClick={() => showEvidence(item.evidenceId)}><Eye size={15} />Evidence · {item.evidenceTime}</button></div>)}
-              </div>
-            </section>
-          )}
+          <AIUnderstandingPanel insights={intakeDemo.insights} narrative={intakeDemo.narrative} revealed={revealedInsights} onEvidence={showEvidence} working={playing} />
         </div>
       ) : source === "call" && selectedHistoricalCall ? (
         <HistoricalCallView call={selectedHistoricalCall} playing={historyPlayingId === selectedHistoricalCall.id} progress={historyProgress} onToggle={() => toggleHistoryPlayback(selectedHistoricalCall.id)} />
@@ -437,18 +454,24 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
 }
 
 function HistoricalCallView({ call, playing, progress, onToggle }: { call: HistoricalCall; playing: boolean; progress: number; onToggle: () => void }) {
+  const [focusedEvidence, setFocusedEvidence] = useState<string | null>(null);
+  const showEvidence = (id: string) => {
+    setFocusedEvidence(id);
+    document.getElementById(`${call.id}-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setFocusedEvidence(null), 2200);
+  };
   return (
     <section className="history-call-workspace">
       <div className="history-call-main">
         <div className="audio-console historical">
           <div className={`recording-icon ${playing ? "live" : ""}`} aria-hidden="true"><PhoneCall size={21} /></div>
-          <button className="audio-button" aria-label={playing ? `Pause ${call.title}` : `Play ${call.title}`} onClick={onToggle}>{playing ? <Pause size={20} weight="fill" /> : <Play size={20} weight="fill" />}</button>
-          <div className="audio-track"><div className="audio-meta"><strong>{call.date} · Customer Call</strong><span>{call.duration}</span></div><div className={`wave-bars ${playing ? "playing" : ""}`} aria-hidden="true">{Array.from({ length: 44 }, (_, index) => <i key={index} style={{ height: `${7 + ((index * 13) % 23)}px` }} />)}</div><div className="audio-progress"><span style={{ width: `${progress}%` }} /></div></div>
+          <button className="audio-button" aria-label={playing ? `Pause call record ${call.sequence}` : `Play call record ${call.sequence}`} onClick={onToggle}>{playing ? <Pause size={20} weight="fill" /> : <Play size={20} weight="fill" />}</button>
+          <div className="audio-track"><div className="audio-meta"><strong>Call record {call.sequence} · {call.date}</strong><span>{call.duration}</span></div><div className={`wave-bars ${playing ? "playing" : ""}`} aria-hidden="true">{Array.from({ length: 44 }, (_, index) => <i key={index} style={{ height: `${7 + ((index * 13) % 23)}px` }} />)}</div><div className="audio-progress"><span style={{ width: `${progress}%` }} /></div></div>
           <button className="analyze-button" onClick={onToggle}>{playing ? "Pause" : progress >= 100 ? "Replay" : "Play recording"}</button>
         </div>
-        <div className="historical-transcript"><div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Analyzed transcript</strong></div><span><CheckCircle size={15} weight="fill" />Speaker separation complete</span></div><div className="conversation-stream">{call.conversation.map((line) => <article className={`utterance fixed ${line.speaker === "Customer" ? "customer" : "agent"}`} key={`${line.time}-${line.speaker}`}><div className="speaker-line"><strong>{line.speaker}</strong><span>{line.time}</span></div><p>{line.text}</p></article>)}</div></div>
+        <div className="historical-transcript"><div className="transcript-heading"><div><Waveform size={19} aria-hidden="true" /><strong>Analyzed transcript</strong></div><div className="semantic-legend">{insightLabels.map((item) => <span className={`${item.key}-dot`} key={item.key}>{item.label}</span>)}</div></div><div className="conversation-stream">{call.conversation.map((line) => <article id={`${call.id}-${line.id}`} className={`utterance fixed ${line.speaker === "Customer" ? "customer" : "agent"} ${focusedEvidence === line.id ? "evidence-focus" : ""}`} key={line.id}><div className="speaker-line"><strong>{line.speaker}</strong><span>{line.time}</span></div><p><StreamedLine line={line} visibleCharacters={Number.POSITIVE_INFINITY} corrected /></p></article>)}</div></div>
       </div>
-      <aside className="history-ai-summary"><div className="history-summary-heading"><span><MagicWand size={19} /></span><div><small>AI-ANALYZED SUMMARY</small><h3>{call.title}</h3></div><b>Call {call.sequence} of 4</b></div><div className="history-continuity"><FlowArrow size={19} /><p><strong>Connection to current complaint</strong>{call.summary.continuity}</p></div><dl><div><dt>Contact reason</dt><dd>{call.summary.reason}</dd></div><div><dt>Handling outcome</dt><dd>{call.summary.outcome}</dd></div><div><dt>Customer sentiment</dt><dd>{call.summary.sentiment}</dd></div></dl></aside>
+      <AIUnderstandingPanel insights={call.insights} narrative={call.narrative} revealed={new Set<SemanticType>(insightLabels.map((item) => item.key))} onEvidence={showEvidence} />
     </section>
   );
 }
@@ -608,14 +631,14 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
   );
 }
 
-function RecommendationScreen({ agents, onEvidence, onNext }: { agents: ReviewAgent[]; onEvidence: (agentId: string) => void; onNext: () => void }) {
+function RecommendationScreen({ agents, instruction, setInstruction, onEvidence, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onEvidence: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
   return (
     <section className="screen-panel recommendation-screen">
-      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE RECOMMENDATION</p><h2>Compensation Recommendation</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on {agents.length} Agent results</span></div>
-      <section className="settlement-overview">
-        <div className="coverage-result"><span>THREE GUARANTEES ASSESSMENT</span><strong><CheckCircle size={20} weight="fill" />Applicable</strong></div>
-        <div className="allocation-result"><span>RECOMMENDED COMMERCIAL COMPENSATION</span><div><strong>BMW <b>{settlementRecommendation.bmwShare}%</b></strong><strong>Dealer <b>{settlementRecommendation.dealerShare}%</b></strong></div><div className="allocation-bar" aria-label={`BMW ${settlementRecommendation.bmwShare} percent, Dealer ${settlementRecommendation.dealerShare} percent`}><span style={{ width: `${settlementRecommendation.bmwShare}%` }} /><i style={{ width: `${settlementRecommendation.dealerShare}%` }} /></div><small>Commercial cost sharing · not technical fault attribution</small></div>
-        <p>{settlementRecommendation.summary}</p>
+      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7)</p><h2>Recommendation &amp; Decision</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Based on {agents.length} Agent results</span></div>
+      <section className="recommendation-outcome" aria-label="AI-generated handling recommendation">
+        <div className="decision-ai-icon" aria-hidden="true"><MagicWand size={24} weight="duotone" /></div>
+        <div><span>AI-GENERATED {settlementRecommendation.type.toUpperCase()}</span><h3>{settlementRecommendation.title}</h3><p>{settlementRecommendation.summary}</p></div>
+        <small>Generated for this case</small>
       </section>
       <div className="recommendation-conclusions">
         {settlementRecommendation.conclusions.map((conclusion) => {
@@ -623,34 +646,12 @@ function RecommendationScreen({ agents, onEvidence, onNext }: { agents: ReviewAg
           return <article key={conclusion.id}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><div><small>{conclusion.label}</small><strong>{conclusion.value}</strong><p>{conclusion.rationale}</p></div><button onClick={() => onEvidence(agent.id)}><Eye size={16} /><span>View Agent Evidence</span><small>{agent.name} · {agent.system}</small><CaretRight size={16} /></button></article>;
         })}
       </div>
-      <div className="prepared-by"><User size={19} aria-hidden="true" /><span>Prepared by Customer Care (BBS-A-7)</span><RoleBadge>Planner</RoleBadge></div>
-      <div className="next-step"><strong>Human decision required</strong><p>Confirm or adjust the compensation shares, or determine that the case is not covered and notify the dealer.</p></div>
-      <div className="screen-actions"><button className="primary-button wide button-with-icon" onClick={onNext}>Review Human Decision<ArrowRight size={18} aria-hidden="true" /></button></div>
-    </section>
-  );
-}
-
-function ConfirmationScreen({ agents, instruction, setInstruction, onEvidence, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onEvidence: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
-  return (
-    <section className="screen-panel decision-screen">
-      <div className="screen-heading"><div><p className="section-kicker">HUMAN DECISION</p><h2>Make Final Decision</h2></div></div>
-      <section className="decision-evidence" aria-label="Evidence from the previous step">
-        <header><div><span>REVIEW EVIDENCE</span><h3>Evidence used in the AI recommendation</h3></div><small>Open any result for source details</small></header>
-        <div>{settlementRecommendation.conclusions.map((conclusion) => {
-          const agent = agents.find((item) => item.id === conclusion.agentId) ?? recommendedReviewAgents.find((item) => item.id === conclusion.agentId)!;
-          return <button key={conclusion.id} onClick={() => onEvidence(agent.id)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} size={18} /></span><span><small>{agent.name}</small><strong>{conclusion.label}: {conclusion.value}</strong></span><Eye size={17} /><b>View evidence</b></button>;
-        })}</div>
-      </section>
-      <section className="decision-ai-recommendation" aria-label="AI recommendation from the previous step">
-        <div className="decision-ai-icon" aria-hidden="true"><MagicWand size={22} weight="duotone" /></div>
-        <div><span>AI RECOMMENDATION FROM REVIEW</span><h3>Three Guarantees applies</h3><p>{settlementRecommendation.summary}</p></div>
-        <div className="decision-ai-allocation"><small>Recommended allocation</small><strong>BMW {settlementRecommendation.bmwShare}% <i>/</i> Dealer {settlementRecommendation.dealerShare}%</strong></div>
-      </section>
       <section className="decision-instruction">
-        <header><div><span>YOUR DECISION</span><h3>Enter the final decision in natural language</h3><p>The AI recommendation is provided above as a reference.</p></div></header>
+        <header><div><span>HUMAN DECISION</span><h3>Enter the final decision in natural language</h3><p>Use the AI-generated recommendation and its evidence as a reference. The decision can be edited for this case.</p></div></header>
         <label htmlFor="decision-instruction"><span>Decision <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
       </section>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim()} onClick={onConfirm}><CheckCircle size={18} />Submit Decision &amp; Close</button></div>
+      <div className="prepared-by"><User size={19} aria-hidden="true" /><span>AI recommendation prepared by Customer Care</span><RoleBadge>Planner</RoleBadge></div>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim()} onClick={onConfirm}><CheckCircle size={18} />Submit Decision &amp; Close</button></div>
     </section>
   );
 }

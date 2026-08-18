@@ -150,6 +150,8 @@ export const optionalReviewAgents: ReviewAgent[] = [
 ];
 
 export const settlementRecommendation = {
+  type: "Recommended resolution",
+  title: "Handle under Three Guarantees with shared commercial compensation",
   applicability: "Applicable",
   bmwShare: 20,
   dealerShare: 80,
