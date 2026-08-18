@@ -1,0 +1,73 @@
+{
+  "id": "CC-2026-0088",
+  "customer": "Mr. Wang",
+  "vehicle": "BMW Demo Model",
+  "vin": "DEMO-VIN-0088",
+  "priority": "High",
+  "issue": "Recurring loss of power",
+  "request": "Vehicle return",
+  "process": "Customer Complaints & Quality Handling",
+  "complaint": {
+    "callDuration": "03:42",
+    "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I request a vehicle return under the Three Guarantees policy.",
+    "scanSource": "Market Regulation Administration",
+    "scanReference": "MRA-2026-0512-0188",
+    "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal vehicle-return request."
+  },
+  "objective": "Determine whether the case qualifies for a Three Guarantees vehicle return.",
+  "agents": [
+    {
+      "name": "Customer Care",
+      "system": "BBS-A-7",
+      "role": "Planner",
+      "task": "Plan the review, coordinate work and consolidate the recommendation",
+      "findings": []
+    },
+    {
+      "name": "Warranty",
+      "system": "BBS-A-4",
+      "role": "Data Agent",
+      "task": "Confirm Three Guarantees return eligibility",
+      "findings": ["Coverage active", "Repeated repair attempts confirmed", "Return criteria matched"]
+    },
+    {
+      "name": "Technical Service",
+      "system": "C5-CN-A-6",
+      "role": "Data Agent",
+      "task": "Assess the recurring power-loss issue",
+      "findings": ["Recurring power loss confirmed", "Root cause remains unresolved", "Further repair not recommended"]
+    },
+    {
+      "name": "Previous Case Guidance",
+      "system": "Enterprise Knowledge",
+      "role": "Knowledge Agent",
+      "task": "Review comparable handling outcomes",
+      "findings": ["3 comparable cases found", "Vehicle-return route consistently applied"]
+    }
+  ],
+  "access": {
+    "scope": "This case only",
+    "mode": "Read only",
+    "duration": "30 minutes",
+    "sources": [
+      { "name": "Warranty (BBS-A-4)", "detail": "Warranty and repair records" },
+      { "name": "Technical Service (C5-CN-A-6)", "detail": "Diagnostic and technical records" }
+    ]
+  },
+  "records": [
+    { "date": "2025-10-18", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty (BBS-A-4)" },
+    { "date": "2025-12-02", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty (BBS-A-4)" },
+    { "date": "2026-02-11", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty (BBS-A-4)" },
+    { "date": "2026-05-20", "record": "Technical Assessment", "finding": "Recurring fault confirmed", "source": "Technical Service (C5-CN-A-6)" }
+  ],
+  "previousCases": [
+    { "caseId": "CC-2025-1123", "issue": "Recurring power loss", "handling": "Vehicle return process", "outcome": "Completed" },
+    { "caseId": "CC-2025-0876", "issue": "Repeated high-voltage shutdown", "handling": "Vehicle return process", "outcome": "Completed" },
+    { "caseId": "CC-2025-0542", "issue": "Major fault after multiple repairs", "handling": "Vehicle return process", "outcome": "Completed" }
+  ],
+  "recommendation": {
+    "title": "Start Three Guarantees Vehicle Return",
+    "reasons": ["Warranty return criteria matched", "Recurring fault confirmed", "Previous case handling is consistent"]
+  },
+  "completionActions": ["Customer Care case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
+}
