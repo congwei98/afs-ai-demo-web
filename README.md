@@ -25,7 +25,7 @@ npm run start
 
 1. In the **AFS Process Workbench**, choose **Customer Care** from the left-side process-domain navigation and open AI-created case `CC-2026-0088`.
 2. Review the inbound call’s live transcript and AI extraction, then open the Router suggestion.
-3. Click **Agree with AI** to hand the case from the Router Agent to the Three Guarantees Vehicle Return Process Agent. You can also type an alternative route to Customer Care, Technical Service or Warranty; the routing action updates directly.
+3. Click **Agree with AI** to pre-fill the handoff to the Three Guarantees Vehicle Return Process Agent. Edit the instruction if needed, then use **Hand off to Process Agent** to execute. You can also type an alternative route to Customer Care, Technical Service or Warranty.
 4. Follow the **Route Execution** receipts through Process Agent and Execution Agent until CCO creates the complaint case. Return to the Workbench after the task reaches `WAITING_DEALER_EVIDENCE`.
 5. In the Workbench, use **Mock Dealer Submit** to simulate the dealer completing the external CCO task. The case changes to `REVIEW_READY` only after `DealerSubmissionCompleted` is received.
 6. Click **Open Review** to re-enter the case and generate the Review Plan.
