@@ -63,12 +63,13 @@ type DealerSubmission = {
   evidenceCount: number;
 };
 
-const steps = ["Intake", "Route & CCO", "Dealer Evidence", "Review", "Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
 const reviewProcessAgentName = "Three Guarantees Vehicle Return Process Agent";
 
 const ccoCreationActions = [
-  { title: "Build the complaint-case request", detail: "The Router passes the approved route, call evidence and customer context to the Execution Agent." },
-  { title: "Create the complaint case in CCO", detail: "The Execution Agent calls CCO once with the approved route and an idempotency key." },
+  { title: "Hand over the approved route", detail: `The Router Agent hands the case and call evidence to the ${reviewProcessAgentName}.` },
+  { title: "Build the complaint-case request", detail: "The Process Agent prepares the CCO request with the approved route and customer context." },
+  { title: "Create the complaint case in CCO", detail: "The Execution Agent calls CCO once with the Process Agent request and an idempotency key." },
   { title: "Receive the CCO case record", detail: `CCO returns case ${caseData.id} and confirms that the record was created.` },
   { title: "Set the asynchronous wait state", detail: "The Process Agent records WAITING_DEALER_EVIDENCE and closes this Route task." },
 ];
@@ -304,15 +305,19 @@ type RouteInterpretation = { action: "confirm" | "modify" | "clarify"; destinati
 function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void; onModify: (target: string) => void }) {
   const [instruction, setInstruction] = useState("");
   const [interpretation, setInterpretation] = useState<RouteInterpretation | null>(null);
-  const interpretInstruction = () => {
-    const value = instruction.trim().toLowerCase();
+  const updateRoutingAction = (nextInstruction: string) => {
+    setInstruction(nextInstruction);
+    const value = nextInstruction.trim().toLowerCase();
     if (/warranty|保修|质保/.test(value)) return setInterpretation({ action: "modify", destination: "Warranty Exception Review", domain: "Warranty", summary: "Override the AI suggestion and route this case to the Warranty domain." });
     if (/technical|tsara|技术/.test(value)) return setInterpretation({ action: "modify", destination: "Technical Service Escalation", domain: "Technical Service", summary: "Override the AI suggestion and route this case to Technical Service." });
     if (/other complaint|not a return|普通投诉|其他投诉|不是退车|不进入退车/.test(value)) return setInterpretation({ action: "modify", destination: "Customer Care · Other Complaint Queue", domain: "Customer Care", summary: "Keep the complaint in Customer Care without starting the Return Complaint Process Agent." });
-    if (/agree|confirm|start|proceed|create|同意|确认|启动|进入退车|创建/.test(value)) return setInterpretation({ action: "confirm", destination: "Execution Agent → CCO complaint case", domain: "Customer Care", summary: "Accept the AI route, start the Return Complaint Process Agent and create the complaint case in CCO before this Route task closes." });
+    if (/agree|confirm|start|proceed|create|同意|确认|启动|进入退车|创建/.test(value)) return setInterpretation({ action: "confirm", destination: reviewProcessAgentName, domain: "Customer Care", summary: "Accept the AI route and hand the case from the Router Agent to the Three Guarantees Vehicle Return Process Agent." });
     setInterpretation({ action: "clarify", destination: "No action yet", domain: "Customer Care", summary: "The instruction does not identify whether to start or change the route. Add a destination or an explicit approval." });
   };
-  const selectExample = (value: string) => { setInstruction(value); setInterpretation(null); };
+  const agreeWithAi = () => {
+    setInstruction("I agree with the AI. Hand this case to the Three Guarantees Vehicle Return Process Agent.");
+    onConfirm();
+  };
   return (
     <section className="screen-panel routing-screen">
       <div className="screen-heading"><div><p className="section-kicker">LEADING / ROUTER AGENT</p><h2>Review AI Routing Suggestion</h2></div><span className="waiting-pill"><User size={16} />Human instruction required</span></div>
@@ -321,19 +326,18 @@ function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void;
         <div className="routing-facts">
           <article><span>Complaint classification</span><strong>COMPLAINT</strong><p>Recurring unresolved fault, safety concern and a requested remedy.</p></article>
           <article><span>Candidate signal</span><strong>RETURN_CANDIDATE</strong><p>Customer explicitly asks for a vehicle return under Three Guarantees.</p></article>
-          <article><span>Approved next action</span><strong>CREATE_CCO_COMPLAINT_CASE</strong><p>After human confirmation, the Execution Agent must create the complaint case in CCO.</p></article>
+          <article><span>Approved next action</span><strong>HAND_OFF_TO_RETURN_PROCESS_AGENT</strong><p>After human confirmation, the Router Agent hands the case to the Process Agent, which then creates the CCO complaint case.</p></article>
           <article className="caution"><span>Important boundary</span><strong>Not an eligibility decision</strong><p>Three repair visits do not by themselves satisfy the “more than four repairs” condition.</p></article>
         </div>
       </section>
       <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want BMW to accept a vehicle return under the Three Guarantees policy.”</h3></div></header><div><span className="signal-tag">Explicit return request</span><span className="signal-tag">Recurring power loss</span><span className="risk-tag">Safety concern</span></div></section>
       <section className="nl-routing-command">
-        <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Your instruction is converted to a structured routing action before anything is applied.</p></div></div>
-        <div className="command-examples" aria-label="Example routing instructions"><button onClick={() => selectExample("I agree with the AI. Start the Return Complaint Process Agent and create the complaint case in CCO.")}>Agree with AI</button><button onClick={() => selectExample("Do not start the return process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => selectExample("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => selectExample("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
-        <label htmlFor="route-instruction"><span>Your instruction</span><textarea id="route-instruction" placeholder="For example: I agree. Start the return process and create the complaint case in CCO." value={instruction} onChange={(event) => { setInstruction(event.target.value); setInterpretation(null); }} /></label>
-        <button className="secondary-button interpret-button button-with-icon" onClick={interpretInstruction} disabled={!instruction.trim()}><MagicWand size={17} />Interpret instruction</button>
-        {interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>INTERPRETED ACTION</span><strong>{interpretation.action === "confirm" ? "CONFIRM_START" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
+        <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Your routing action updates directly as you type; no separate interpretation step is required.</p></div></div>
+        <div className="command-examples" aria-label="Example routing instructions"><button onClick={agreeWithAi}>Agree with AI</button><button onClick={() => updateRoutingAction("Do not start the return process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => updateRoutingAction("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => updateRoutingAction("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
+        <label htmlFor="route-instruction"><span>Your instruction</span><textarea id="route-instruction" placeholder="For example: Route this case to Warranty Exception Review." value={instruction} onChange={(event) => updateRoutingAction(event.target.value)} /></label>
+        {interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>ROUTING ACTION</span><strong>{interpretation.action === "confirm" ? "HAND_OFF_TO_PROCESS_AGENT" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
       </section>
-      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The route, human instruction and CCO creation receipt are retained in one audit trail.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Apply decision & create CCO case"}</button></div>
+      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The route, human instruction, Process Agent handoff and CCO receipt are retained in one audit trail.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Hand off to Process Agent"}</button></div>
     </section>
   );
 }
@@ -356,14 +360,16 @@ function CreateComplaintCaseExecution({ created, onCreated, onWorkbench }: { cre
   return (
     <section className="screen-panel cco-create-screen">
       <div className="screen-heading"><div><p className="section-kicker">ROUTE EXECUTION</p><h2>{complete ? "CCO Complaint Case Created" : "Creating Complaint Case in CCO"}</h2></div><span className={complete ? "success-pill" : "network-live"}>{complete ? <><CheckCircle size={16} weight="fill" />Route complete</> : <><span />Executing</>}</span></div>
-      <section className="execution-network cco-create-network" aria-label="The Router starts the Execution Agent, which creates a complaint case in CCO">
-        <header><span>LIVE EXECUTION</span><h3>Approved Route → Execution Agent → CCO</h3><p>The Route decision is not complete until CCO returns the created complaint-case record.</p></header>
+      <section className="execution-network cco-create-network" aria-label="The Router hands the case to the Three Guarantees Vehicle Return Process Agent, which creates a complaint case in CCO through the Execution Agent">
+        <header><span>LIVE EXECUTION</span><h3>Router Agent → Process Agent → Execution Agent → CCO</h3><p>The Route decision is not complete until the Process Agent receives the CCO complaint-case record.</p></header>
         <div className="execution-flow">
           <div className={`execution-node agent-node ${phase > 0 ? "done" : "active"}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>Router Agent</strong><em>Leading Agent</em><small>Approved route RD-0088 v1</small></div>
-          <div className={`execution-link ${phase === 0 ? "active" : phase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 0 ? "SENDING REQUEST" : "REQUEST SENT"}</b></div>
-          <div className={`execution-node agent-node ${phase >= 3 ? "done" : phase > 0 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><UploadSimple size={18} weight="bold" /></span></div><strong>Execution &amp; Automation</strong><em>Execution Agent</em><small>Creates the complaint case once</small></div>
-          <div className={`execution-link ${phase > 0 && phase < 4 ? "active" : phase >= 4 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 4 ? "CASE RETURNED" : phase > 0 ? "WORKING IN CCO" : "WAITING"}</b></div>
-          <div className={`cco-system ${complete ? "done" : phase > 1 ? "active" : ""}`}><div className="system-window"><span /><span /><span /><SquaresFour size={34} weight="duotone" /></div><strong>CCO</strong><em>Existing system</em><small>Create complaint case</small></div>
+          <div className={`execution-link ${phase === 0 ? "active" : phase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 0 ? "HANDOFF" : "HANDED OFF"}</b></div>
+          <div className={`execution-node agent-node process-agent-node ${phase >= 2 ? "done" : phase > 0 ? "active" : ""}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>{reviewProcessAgentName}</strong><em>Process Agent</em><small>Owns the return complaint process</small></div>
+          <div className={`execution-link ${phase === 1 ? "active" : phase > 1 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 1 ? "SENDING CASE REQUEST" : phase > 1 ? "REQUEST SENT" : "WAITING"}</b></div>
+          <div className={`execution-node agent-node ${phase >= 4 ? "done" : phase > 1 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><UploadSimple size={18} weight="bold" /></span></div><strong>Execution &amp; Automation</strong><em>Execution Agent</em><small>Creates the complaint case once</small></div>
+          <div className={`execution-link ${phase > 1 && phase < 5 ? "active" : phase >= 5 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 5 ? "CASE RETURNED" : phase > 1 ? "WORKING IN CCO" : "WAITING"}</b></div>
+          <div className={`cco-system ${complete ? "done" : phase > 2 ? "active" : ""}`}><div className="system-window"><span /><span /><span /><SquaresFour size={34} weight="duotone" /></div><strong>CCO</strong><em>Existing system</em><small>Create complaint case</small></div>
         </div>
         <p className="execution-status" role="status" aria-live="polite"><span className={complete ? "map-check" : "spinner"}>{complete && <Check size={12} weight="bold" />}</span>{currentMessage}</p>
       </section>
