@@ -44,6 +44,11 @@ import {
   Wrench,
   X,
   Clock,
+  Hourglass,
+  Buildings,
+  ListChecks,
+  Headset,
+  Sparkle,
 } from "@phosphor-icons/react";
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
@@ -52,11 +57,16 @@ import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settl
 
 type ReviewState = "plan" | "running" | "results";
 type ComplaintSource = "call" | "scan";
+type DealerSubmission = {
+  contactSummary: string;
+  submittedAt: string;
+  evidenceCount: number;
+};
 
-const steps = ["Intake", "Review", "Recommendation & Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
 
 function createDecisionInstruction() {
-  return `Apply Three Guarantees to this case. Set the cost share at BMW ${settlementRecommendation.bmwShare}% and dealer ${settlementRecommendation.dealerShare}%. Save the decision and Agent evidence in CCO, complete the approval, and close the case.`;
+  return `Start the vehicle-return handling process under the Three Guarantees policy. Record the approved customer remedy separately from the internal BMW ${settlementRecommendation.bmwShare}% / dealer ${settlementRecommendation.dealerShare}% allocation. Save the decision, evidence and action receipts in CCO.`;
 }
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
@@ -93,6 +103,10 @@ export default function ProcessApp() {
   const [source, setSource] = useState<ComplaintSource>("call");
   const [playing, setPlaying] = useState(false);
   const [caseCompleted, setCaseCompleted] = useState(false);
+  const [routeConfirmed, setRouteConfirmed] = useState(false);
+  const [dealerMockOpen, setDealerMockOpen] = useState(false);
+  const [dealerSubmission, setDealerSubmission] = useState<DealerSubmission | null>(null);
+  const [routedDomain, setRoutedDomain] = useState<string | null>(null);
   const [decisionInstruction, setDecisionInstruction] = useState(createDecisionInstruction);
   const [plannedAgents, setPlannedAgents] = useState<ReviewAgent[]>(() => recommendedReviewAgents.map((agent) => ({ ...agent })));
 
@@ -103,6 +117,8 @@ export default function ProcessApp() {
     setAccessGranted(false);
     setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
     setCaseCompleted(false);
+    setRouteConfirmed(false);
+    setDealerSubmission(null);
     setDecisionInstruction(createDecisionInstruction());
   };
 
@@ -119,23 +135,25 @@ export default function ProcessApp() {
 
   const completeCase = () => {
     setCaseCompleted(false);
-    setStage(4);
+    setStage(6);
   };
 
   const timeline = useMemo(() => {
     const events = [
       { label: "Complaint received", done: stage > 1 || caseCompleted },
-      { label: "Review plan prepared", done: stage > 2 || reviewState !== "plan" },
+      { label: "Process start confirmed", done: routeConfirmed },
+      { label: "Dealer evidence received", done: Boolean(dealerSubmission) },
+      { label: "Review plan prepared", done: stage > 4 || reviewState !== "plan" },
       { label: "Case access allowed", done: accessGranted },
-      { label: "Agent review completed", done: reviewState === "results" || stage > 2 },
-      { label: "Recommendation prepared", done: stage >= 3 },
+      { label: "Agent review completed", done: reviewState === "results" || stage > 4 },
+      { label: "Recommendation prepared", done: stage >= 5 },
       { label: "Case completed", done: caseCompleted },
     ];
     const firstPending = events.findIndex((event) => !event.done);
     return events.map((event, index) => ({ ...event, active: firstPending === index }));
-  }, [accessGranted, caseCompleted, reviewState, stage]);
+  }, [accessGranted, caseCompleted, dealerSubmission, reviewState, routeConfirmed, stage]);
 
-  if (view === "workbench") return <Workbench onOpen={openCase} completed={caseCompleted} />;
+  if (view === "workbench") return <Workbench onOpen={openCase} completed={caseCompleted} routedDomain={routedDomain} />;
 
   return (
     <main className="app-shell">
@@ -147,7 +165,9 @@ export default function ProcessApp() {
           {stage === 1 && (
             <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} onNext={() => setStage(2)} />
           )}
-          {stage === 2 && (
+          {stage === 2 && <RoutingDecisionScreen onConfirm={() => { setRouteConfirmed(true); setStage(3); }} onModify={(target) => { setRoutedDomain(target); backToWorkbench(); }} />}
+          {stage === 3 && <DealerEvidenceScreen submission={dealerSubmission} onOpenMock={() => setDealerMockOpen(true)} onContinue={() => setStage(4)} onWorkbench={backToWorkbench} />}
+          {stage === 4 && (
             <ReviewScreen
               state={reviewState}
               accessGranted={accessGranted}
@@ -159,15 +179,16 @@ export default function ProcessApp() {
                 setReviewState("plan");
                 setAccessGranted(false);
               }}
-              onNext={() => setStage(3)}
+              onNext={() => setStage(5)}
             />
           )}
-          {stage === 3 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(2)} onConfirm={completeCase} />}
-          {stage === 4 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
+          {stage === 5 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(4)} onConfirm={completeCase} />}
+          {stage === 6 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
-      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} returnLabel={stage === 3 ? "Back to Recommendation & Decision" : "Back to Recommendation"} onClose={() => setRecommendationEvidence(null)} />}
+      {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
+      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} returnLabel={stage === 5 ? "Back to Recommendation & Decision" : "Back to Recommendation"} onClose={() => setRecommendationEvidence(null)} />}
     </main>
   );
 }
@@ -175,8 +196,8 @@ export default function ProcessApp() {
 function ProductHeader({ onHome, showProcess = false }: { onHome?: () => void; showProcess?: boolean }) {
   return (
     <header className="topbar">
-      <button className="brand-button" onClick={onHome}>My Process Management Center</button>
-      {showProcess && <><span className="breadcrumb-separator">›</span><span className="breadcrumb">Customer Complaints &amp; Quality Handling</span></>}
+      <button className="brand-button" onClick={onHome}>AFS Process Management Center</button>
+      {showProcess && <><span className="breadcrumb-separator">›</span><span className="breadcrumb">Customer Care · Customer Complaint Handling</span></>}
       <div className="topbar-spacer" />
       <button className="icon-button" aria-label="Notifications"><Bell size={24} weight="regular" /></button>
       <div className="profile" aria-label="Current user">CW</div>
@@ -184,48 +205,47 @@ function ProductHeader({ onHome, showProcess = false }: { onHome?: () => void; s
   );
 }
 
-function Workbench({ onOpen, completed }: { onOpen: () => void; completed: boolean }) {
+function DomainIcon({ tone, size = 25 }: { tone: string; size?: number }) {
+  if (tone === "technical") return <Wrench size={size} />;
+  if (tone === "warranty") return <ShieldCheck size={size} />;
+  return <Headset size={size} />;
+}
+
+function Workbench({ onOpen, completed, routedDomain }: { onOpen: () => void; completed: boolean; routedDomain: string | null }) {
+  const [selectedDomain, setSelectedDomain] = useState(routedDomain ?? "Customer Care");
+  const items = workbenchData.workItems.map((item) => item.caseId === caseData.id && routedDomain ? { ...item, domain: routedDomain, status: "Human-rerouted" } : item).filter((item) => item.domain === selectedDomain);
+  const activeDomain = workbenchData.domains.find((domain) => domain.name === selectedDomain) ?? workbenchData.domains[0];
   return (
     <main className="app-shell">
       <ProductHeader />
       <div className="workspace">
         <aside className="sidebar" aria-label="Primary navigation">
-          <button className="nav-item active"><SquaresFour size={20} aria-hidden="true" />Workbench</button>
-          <button className="nav-item"><FlowArrow size={20} aria-hidden="true" />Processes</button>
-          <button className="nav-item"><CheckSquare size={20} aria-hidden="true" />Tasks</button>
+          <div className="nav-section-label">AFS WORKBENCH</div>
+          <button className="nav-item"><SquaresFour size={20} aria-hidden="true" />Overview</button>
+          <div className="nav-section-label process-label-nav">PROCESS DOMAINS</div>
+          {workbenchData.domains.map((domain) => <button className={`nav-item nav-domain ${selectedDomain === domain.name ? "active" : ""}`} onClick={() => setSelectedDomain(domain.name)} aria-current={selectedDomain === domain.name ? "page" : undefined} key={domain.id}><DomainIcon tone={domain.tone} size={20} /><span>{domain.name}<small>{domain.pending} pending</small></span></button>)}
+          <div className="nav-divider" />
+          <button className="nav-item"><CheckSquare size={20} aria-hidden="true" />My Tasks</button>
         </aside>
         <section className="content workbench-content">
           <div className="page-heading">
-            <div><h1>My Workbench</h1><p>Business processes requiring your attention</p></div>
+            <div><p className="eyebrow">AFS PROCESS MANAGEMENT</p><h1>AFS Process Workbench</h1><p>One place to monitor and operate aftersales processes across business domains</p></div>
+            <span className="workbench-live"><span />Live process activity</span>
           </div>
-          <div className="workbench-grid">
-            <div>
-              <div className="metrics" aria-label="Work summary">
-                {workbenchData.metrics.map((metric) => <article key={metric.label}><span>{metric.label}</span><strong>{metric.label === "Completed Today" && completed ? metric.value + 1 : metric.value}</strong></article>)}
-              </div>
-              <section className="panel pending-panel">
-                <div className="panel-heading"><div><h2>My Pending Work</h2><p>Prioritized by due date and business impact</p></div><span className="count-badge">7 items</span></div>
-                <div className="work-table" role="table" aria-label="Pending work">
-                  <div className="work-row table-header" role="row"><span>Process</span><span>Case</span><span>Request</span><span>Priority</span><span>Status</span><span>Action</span></div>
-                  {workbenchData.workItems.map((item) => {
-                    const isDemo = item.caseId === caseData.id;
-                    return (
-                      <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}>
-                        <strong>{item.process}</strong><span>{item.caseId}</span><span>{item.request}</span>
-                        <span><span className={`priority ${item.priority.toLowerCase()}`}>{item.priority}</span></span>
-                        <span>{isDemo && completed ? "Completed" : item.status}</span>
-                        <span><button className={isDemo ? "primary-button" : "text-button"} onClick={isDemo ? onOpen : undefined}>{isDemo && completed ? "View" : "Open"}</button></span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+          <div className="metrics" aria-label="AFS work summary">
+            {workbenchData.metrics.map((metric) => <article key={metric.label}><span>{metric.label}</span><strong>{metric.label === "Completed today" && completed ? metric.value + 1 : metric.value}</strong></article>)}
+          </div>
+          <section className="panel pending-panel domain-cases">
+            <div className="panel-heading domain-panel-heading"><span className={`domain-heading-icon ${activeDomain.tone}`}><DomainIcon tone={activeDomain.tone} /></span><div><p className="eyebrow">{activeDomain.name.toUpperCase()}</p><h2>Active cases</h2><p>{activeDomain.description}</p></div><dl><div><dt>Pending</dt><dd>{activeDomain.pending}</dd></div><div><dt>In progress</dt><dd>{activeDomain.inProgress}</dd></div></dl><span className="count-badge">{items.length} visible</span></div>
+            <div className="work-table" role="table" aria-label={`${selectedDomain} active cases`}>
+              <div className="work-row table-header" role="row"><span>Process</span><span>Case</span><span>Trigger</span><span>Detected intent</span><span>Status</span><span>Action</span></div>
+              {items.map((item) => {
+                const isDemo = item.caseId === caseData.id;
+                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />AI-created from call</small>}</strong><span>{item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={isDemo ? "case-status new" : "case-status"}>{isDemo && completed ? "Completed" : item.status}</b></span><span><button className={isDemo ? "primary-button" : "text-button"} onClick={isDemo ? onOpen : undefined} disabled={!isDemo}>{isDemo && completed ? "View" : "Open"}</button></span></div>;
+              })}
+              {items.length === 0 && <div className="domain-empty"><CheckCircle size={24} /><strong>No active cases in this domain</strong><span>Select another process domain.</span></div>}
             </div>
-            <aside className="panel process-panel">
-              <div className="panel-heading"><h2>Business Processes</h2></div>
-              {workbenchData.processes.map((process) => <button className="process-link" key={process.name}><span>{process.name}<small>{process.pending} pending</small></span><CaretRight size={20} aria-hidden="true" /></button>)}
-            </aside>
-          </div>
+          </section>
         </section>
       </div>
     </main>
@@ -233,16 +253,17 @@ function Workbench({ onOpen, completed }: { onOpen: () => void; completed: boole
 }
 
 function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: { label: string; done: boolean; active: boolean }[]; onSelect: (stage: number) => void }) {
-  const reviewStatus = timeline[3].done ? "Agent review completed" : timeline[2].done ? "Agents executing" : timeline[1].done ? "Plan prepared" : "Pending";
   const stageStatuses = [
     timeline[0].done ? "Complaint captured" : "Current step",
-    reviewStatus,
-    stage > 3 ? "Decision submitted" : stage === 3 ? "Human decision" : "Pending",
-    timeline[5].done ? "Case completed" : stage === 4 ? "Automation running" : "Pending",
+    timeline[1].done ? "Human confirmed" : stage === 2 ? "Human gate" : "Pending",
+    timeline[2].done ? "Submission received" : stage === 3 ? "Waiting externally" : "Pending",
+    timeline[5].done ? "Review completed" : timeline[4].done ? "Agents executing" : stage === 4 ? "Plan approval" : "Pending",
+    stage > 5 ? "Decision submitted" : stage === 5 ? "Human decision" : "Pending",
+    timeline[7].done ? "Case completed" : stage === 6 ? "Automation running" : "Pending",
   ];
   return (
     <nav className="stepper compact" aria-label="Case progress">
-      <div className="process-label"><span>PROCESS EXECUTION</span><strong>Customer complaint handling</strong></div>
+      <div className="process-label"><span>RETURN COMPLAINT QUICK WIN</span><strong>Human-controlled case flow</strong></div>
       {steps.map((label, index) => {
         const number = index + 1;
         return <button key={label} className={`step ${stage === number ? "active" : ""} ${stage > number ? "done" : ""}`} onClick={() => onSelect(number)} disabled={number > stage}><span>{stage > number ? <Check size={15} weight="bold" aria-hidden="true" /> : number}</span><b>{label}<small>{stageStatuses[index]}</small></b></button>;
@@ -258,6 +279,78 @@ function CaseIdentity() {
       <span><User size={22} aria-hidden="true" />{caseData.customer}</span>
       <span><Car size={24} aria-hidden="true" />{caseData.vehicle}</span>
       <span><Barcode size={24} aria-hidden="true" />VIN {caseData.vin}</span>
+    </div>
+  );
+}
+
+type RouteInterpretation = { action: "confirm" | "modify" | "clarify"; destination: string; domain: string; summary: string };
+
+function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void; onModify: (target: string) => void }) {
+  const [instruction, setInstruction] = useState("");
+  const [interpretation, setInterpretation] = useState<RouteInterpretation | null>(null);
+  const interpretInstruction = () => {
+    const value = instruction.trim().toLowerCase();
+    if (/warranty|保修|质保/.test(value)) return setInterpretation({ action: "modify", destination: "Warranty Exception Review", domain: "Warranty", summary: "Override the AI suggestion and route this case to the Warranty domain." });
+    if (/technical|tsara|技术/.test(value)) return setInterpretation({ action: "modify", destination: "Technical Service Escalation", domain: "Technical Service", summary: "Override the AI suggestion and route this case to Technical Service." });
+    if (/other complaint|not a return|普通投诉|其他投诉|不是退车|不进入退车/.test(value)) return setInterpretation({ action: "modify", destination: "Customer Care · Other Complaint Queue", domain: "Customer Care", summary: "Keep the complaint in Customer Care without starting the Return Complaint Process Agent." });
+    if (/agree|confirm|start|proceed|同意|确认|启动|进入退车/.test(value)) return setInterpretation({ action: "confirm", destination: "Return Complaint Process Agent", domain: "Customer Care", summary: "Accept the AI routing suggestion and start the specialized return process." });
+    setInterpretation({ action: "clarify", destination: "No action yet", domain: "Customer Care", summary: "The instruction does not identify whether to start or change the route. Add a destination or an explicit approval." });
+  };
+  const selectExample = (value: string) => { setInstruction(value); setInterpretation(null); };
+  return (
+    <section className="screen-panel routing-screen">
+      <div className="screen-heading"><div><p className="section-kicker">LEADING / ROUTER AGENT</p><h2>Review AI Routing Suggestion</h2></div><span className="waiting-pill"><User size={16} />Human instruction required</span></div>
+      <section className="routing-summary">
+        <div className="routing-score"><MagicWand size={26} aria-hidden="true" /><span>ROUTING SUGGESTION</span><strong>Return complaint candidate</strong><small>94% confidence · Decision RD-0088 v1</small></div>
+        <div className="routing-facts">
+          <article><span>Complaint classification</span><strong>COMPLAINT</strong><p>Recurring unresolved fault, safety concern and a requested remedy.</p></article>
+          <article><span>Candidate signal</span><strong>RETURN_CANDIDATE</strong><p>Customer explicitly asks for a vehicle return under Three Guarantees.</p></article>
+          <article className="caution"><span>Important boundary</span><strong>Not an eligibility decision</strong><p>Three repair visits do not by themselves satisfy the “more than four repairs” condition.</p></article>
+        </div>
+      </section>
+      <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want BMW to accept a vehicle return under the Three Guarantees policy.”</h3></div></header><div><span className="signal-tag">Explicit return request</span><span className="signal-tag">Recurring power loss</span><span className="risk-tag">Safety concern</span></div></section>
+      <section className="nl-routing-command">
+        <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Your instruction is converted to a structured routing action before anything is applied.</p></div></div>
+        <div className="command-examples" aria-label="Example routing instructions"><button onClick={() => selectExample("I agree with the AI. Start the Return Complaint Process Agent.")}>Agree with AI</button><button onClick={() => selectExample("Do not start the return process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => selectExample("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => selectExample("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
+        <label htmlFor="route-instruction"><span>Your instruction</span><textarea id="route-instruction" placeholder="For example: I agree. Start the return process, but keep the three-repair count as supporting evidence only." value={instruction} onChange={(event) => { setInstruction(event.target.value); setInterpretation(null); }} /></label>
+        <button className="secondary-button interpret-button button-with-icon" onClick={interpretInstruction} disabled={!instruction.trim()}><MagicWand size={17} />Interpret instruction</button>
+        {interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>INTERPRETED ACTION</span><strong>{interpretation.action === "confirm" ? "CONFIRM_START" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
+      </section>
+      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The original AI decision and your instruction are both retained in the audit trail.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Apply & start Process Agent"}</button></div>
+    </section>
+  );
+}
+
+function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench }: { submission: DealerSubmission | null; onOpenMock: () => void; onContinue: () => void; onWorkbench: () => void }) {
+  return (
+    <section className="screen-panel dealer-wait-screen">
+      <div className="screen-heading"><div><p className="section-kicker">RETURN COMPLAINT PROCESS AGENT</p><h2>{submission ? "Dealer Submission Received" : "Waiting for Dealer Evidence"}</h2></div><span className={submission ? "success-pill" : "waiting-pill"}>{submission ? <><CheckCircle size={16} weight="fill" />Event received</> : <><Hourglass size={16} />Asynchronous wait</>}</span></div>
+      <section className="cco-case-created"><div className="cco-icon"><SquaresFour size={28} /></div><div><span>CCO CASE CREATED</span><h3>{caseData.id}</h3><p>Created once from Call ID CALL-2026-0088 · Status <b>{submission ? "DEALER_SUBMISSION_RECEIVED" : "WAITING_DEALER_EVIDENCE"}</b></p></div><strong>Idempotency key verified</strong></section>
+      {!submission ? <>
+        <section className="async-boundary"><div className="async-visual"><div><Robot size={42} weight="duotone" /><span>Process Agent</span></div><i /><div><Buildings size={42} weight="duotone" /><span>Dealer in CCO</span></div></div><div><span>PROCESS PAUSED AT EXTERNAL EVENT</span><h3>The Review Plan cannot start yet</h3><p>The dealer must contact the customer and submit evidence in CCO. The Process Agent resumes only after receiving <code>DealerSubmissionCompleted</code>.</p></div></section>
+        <section className="evidence-checklist"><header><ListChecks size={21} /><div><span>DEALER EVIDENCE REQUEST</span><h3>4 required evidence groups</h3></div></header>{["Customer communication summary", "Repair orders and diagnosis records", "TSARA / technical evidence", "Parts orders and arrival timeline"].map((item) => <div key={item}><span /><strong>{item}</strong><small>Waiting</small></div>)}</section>
+      </> : <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>DEALER SUBMISSION COMPLETED</span><h3>External event accepted and matched to {caseData.id}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.evidenceCount} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>}
+      <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={submission ? onWorkbench : onOpenMock}>{submission ? <ArrowLeft size={18} /> : <Buildings size={18} />}{submission ? "Back to Workbench" : "Open Dealer CCO Mock"}</button><button className="primary-button wide button-with-icon" onClick={onContinue} disabled={!submission}>Generate Review Plan<ArrowRight size={18} /></button></div>
+    </section>
+  );
+}
+
+function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
+  const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
+  const [files, setFiles] = useState([true, true, true, true]);
+  const labels = ["3 repair orders", "TSARA result TS-2026-117", "Parts order timeline", "Customer contact record"];
+  const ready = summary.trim().length >= 20 && files.every(Boolean);
+  return (
+    <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+      <section className="modal dealer-mock" role="dialog" aria-modal="true" aria-labelledby="dealer-mock-title">
+        <div className="mock-banner"><Buildings size={21} /><span>DEMO MOCK · EXTERNAL CCO DEALER VIEW</span></div>
+        <h2 id="dealer-mock-title">Complete Dealer Evidence</h2>
+        <p className="modal-intro">This simulates the dealer completing the real CCO task. Closing this window does not advance the process.</p>
+        <label><span>Customer communication summary</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
+        <fieldset><legend>Evidence manifest</legend>{labels.map((label, index) => <label key={label}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{label}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
+        <div className="event-preview"><code>DealerSubmissionCompleted</code><span>Emitted only after this form is submitted</span></div>
+        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: "23 Aug 2026 · 14:42", evidenceCount: files.filter(Boolean).length })}><CheckCircle size={18} />Submit evidence to CCO</button></div>
+      </section>
     </div>
   );
 }
@@ -401,6 +494,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
   return (
     <section className="screen-panel intake-screen">
       <div className="screen-heading"><div><p className="section-kicker">CIC AGENT</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
+      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT CASE</span><strong>Created automatically from inbound call intent</strong><p>Intent detected: complaint · potential vehicle-return request. Open the current recording to review the live transcript and AI extraction.</p></div><b>Case {caseData.id}</b></section>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
@@ -443,7 +537,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
         <div className="complaint-card scan-card"><div className="scan-preview"><FileText size={34} aria-hidden="true" /><span>SCANNED</span><strong>{caseData.complaint.scanReference}</strong></div><div><span className="field-label">Source</span><h3>{caseData.complaint.scanSource}</h3><p>{caseData.complaint.scanSummary}</p></div></div>
       )}
       {source === "scan" && <><h3 className="subheading">Extracted Information</h3><div className="extracted-grid"><article className="extracted-item issue"><div className="extracted-icon"><WarningCircle size={25} aria-hidden="true" /></div><div><span>Issue</span><strong>{caseData.issue}</strong></div></article><article className="extracted-item request"><div className="extracted-icon"><ClipboardText size={25} aria-hidden="true" /></div><div><span>Request</span><strong>{caseData.request}</strong></div></article><article className="extracted-item priority-item"><div className="extracted-icon"><Flag size={25} aria-hidden="true" /></div><div><span>Priority</span><strong>{caseData.priority}</strong></div></article></div></>}
-      <div className="screen-actions"><span className="intake-action-hint">{source === "call" && !complete ? "Analyze the recording to continue" : "Complaint information is ready"}</span><button className="primary-button wide button-with-icon" onClick={onNext} disabled={source === "call" && !complete}>Start Review<ArrowRight size={18} aria-hidden="true" /></button></div>
+      <div className="screen-actions"><span className="intake-action-hint">{source === "call" && !complete ? "Analyze the recording to continue" : "Complaint classification is ready for human review"}</span><button className="primary-button wide button-with-icon" onClick={onNext} disabled={source === "call" && !complete}>Review routing suggestion<ArrowRight size={18} aria-hidden="true" /></button></div>
     </section>
   );
 }
@@ -627,6 +721,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
 }
 
 function RecommendationScreen({ agents, instruction, setInstruction, onEvidence, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onEvidence: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
+  const [reviewed, setReviewed] = useState(false);
   return (
     <section className="screen-panel recommendation-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>Recommendation &amp; Decision</h2></div><span className="ai-plan-badge"><MagicWand size={16} />Report from {agents.length} Agent results</span></div>
@@ -638,7 +733,7 @@ function RecommendationScreen({ agents, instruction, setInstruction, onEvidence,
 
         <section className="report-section report-suggestion" aria-label="AI suggestion">
           <div className="report-section-number">01</div>
-          <div><span>AI SUGGESTION</span><h3>{settlementRecommendation.title}</h3><p>{settlementRecommendation.summary}</p></div>
+          <div><span>AI SUGGESTION</span><div className="ai-decision-boundary"><WarningCircle size={15} />Likely assessment only · human decision required</div><h3>{settlementRecommendation.title}</h3><p>{settlementRecommendation.summary}</p></div>
         </section>
 
         <section className="report-section report-key-evidence" aria-label="Key evidence">
@@ -662,10 +757,10 @@ function RecommendationScreen({ agents, instruction, setInstruction, onEvidence,
 
         <section className="report-section report-decision">
           <div className="report-section-number">03</div>
-          <div className="report-section-body"><span>HUMAN DECISION</span><h3>Write the final decision</h3><p>You can use the AI draft or change it for this case.</p><label htmlFor="decision-instruction"><span>Decision <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label></div>
+          <div className="report-section-body"><span>HUMAN DECISION</span><h3>Write the final decision</h3><p>You can use the AI draft or change it for this case.</p><label htmlFor="decision-instruction"><span>Decision <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label><label className="decision-review-check"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /><span>I reviewed the policy conditions, source evidence and internal allocation separately.</span></label></div>
         </section>
       </article>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim()} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim() || !reviewed} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div>
     </section>
   );
 }

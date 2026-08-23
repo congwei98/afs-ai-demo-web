@@ -30,7 +30,10 @@ test("production server renders the process workbench", async (context) => {
   const response = await waitForServer(`http://127.0.0.1:${port}/`);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /My Process Management Center/);
-  assert.match(html, /My Workbench/);
-  assert.match(html, /Customer Complaints &amp; Quality Handling/);
+  assert.match(html, /AFS Process Management Center/);
+  assert.match(html, /AFS Process Workbench/);
+  assert.match(html, /PROCESS DOMAINS/);
+  assert.match(html, /Customer Care/);
+  assert.match(html, /Technical Service/);
+  assert.match(html, /Warranty/);
 });

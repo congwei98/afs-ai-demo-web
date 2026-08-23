@@ -23,15 +23,15 @@ npm run start
 
 ## Demo click path
 
-1. Open case `CC-2026-0088` from **My Workbench**.
-2. Review the original call recording or scanned complaint.
-3. Click **Start Review**.
-4. Click **Request Case Access**, then **Allow Case Access**.
-5. Wait for the Agent review to complete.
-6. Open **View Records** and **View Previous Cases** to inspect original evidence.
-7. Click **Prepare Recommendation** and continue to confirmation.
-8. Select **I have reviewed the supporting records**.
-9. Click **Confirm & Complete Case**.
+1. In the **AFS Process Workbench**, choose **Customer Care** from the left-side process-domain navigation and open AI-created case `CC-2026-0088`.
+2. Review the inbound call’s live transcript and AI extraction, then open the Router suggestion.
+3. Give the Router a natural-language instruction. Agree with the AI to start the Return Complaint Process Agent, or change the route to Customer Care, Technical Service or Warranty. Review the structured interpretation before applying it.
+4. On **Waiting for Dealer Evidence**, verify that Review is locked. Open **Dealer CCO Mock**, complete the evidence task and submit it.
+5. After `DealerSubmissionCompleted` is received, generate the Review Plan.
+6. Click **Check Access & Run**, then **Allow & Run** and wait for the Agent review to complete.
+7. Open Agent evidence, then click **Create Report**.
+8. Review the corrected Three Guarantees reasoning, edit the decision if needed, and select the human-review confirmation.
+9. Click **Confirm & Execute** and follow the individual CCO action receipts.
 10. Return to the workbench and see the case as completed.
 
 ## Edit or add mock data
@@ -58,4 +58,4 @@ The JSON files can be edited in any text editor. Keep the existing property name
 - Plain CSS design tokens for easy visual adjustment without a UI framework.
 - Static JSON imports for transparent, version-controlled mock data.
 
-No backend, database, authentication or API connection is required.
+No backend, database, authentication or API connection is required. The dealer step is deliberately asynchronous in the UI: the Process Agent cannot continue until the mock external CCO task emits `DealerSubmissionCompleted`. In a real environment, CCO would emit that event after the dealer submits its evidence.

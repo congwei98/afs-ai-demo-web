@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import ProcessApp from "./ProcessApp";
 
 export const metadata: Metadata = {
-  title: "My Process Management Center",
-  description: "Customer complaints and quality handling demo",
+  title: "AFS Process Management Center",
+  description: "AFS-wide AI-assisted process workbench demo",
 };
 
 export default function Home() {

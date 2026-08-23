@@ -14,7 +14,7 @@
     "scanReference": "MRA-2026-0512-0188",
     "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal vehicle-return request."
   },
-  "objective": "Determine Three Guarantees applicability and the compensation allocation between BMW and the dealer.",
+  "objective": "Determine Three Guarantees scope and return conditions, then assess the customer remedy and internal BMW/dealer allocation separately.",
   "agents": [
     {
       "name": "Customer Care",
@@ -28,14 +28,14 @@
       "system": "BBS-A-4",
       "role": "Data Agent",
       "task": "Confirm Three Guarantees eligibility",
-      "findings": ["Coverage active", "Repeated repair attempts confirmed", "Three Guarantees criteria matched"]
+      "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"]
     },
     {
       "name": "Technical Service Agent",
       "system": "C5-CN-A-6",
       "role": "Data Agent",
       "task": "Retrieve the TSARA Result and establish fault origin",
-      "findings": ["Recurring power loss confirmed", "Product-related fault", "No dealer-induced damage"]
+      "findings": ["Serious safety-performance fault confirmed", "Fault persists after repeated repair attempts", "No dealer-induced damage"]
     },
     {
       "name": "Case Knowledge Agent",
@@ -66,8 +66,8 @@
     { "caseId": "CC-2025-0542", "issue": "Major fault after one repair", "handling": "Not covered", "outcome": "Case closed" }
   ],
   "recommendation": {
-    "title": "Three Guarantees Applicable · BMW 20% / Dealer 80%",
-    "reasons": ["Repeated-repair criteria matched", "TSARA confirms a product-related fault", "Comparable cases support the proposed compensation allocation"]
+    "title": "Likely Eligible for Return · Human Decision Required",
+    "reasons": ["TSARA confirms an unresolved serious safety-performance fault", "Three visits are not used as the standalone threshold", "Internal BMW/dealer allocation is assessed separately from customer entitlement"]
   },
   "completionActions": ["Customer Care case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
 }

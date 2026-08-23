@@ -1,38 +1,54 @@
 {
   "metrics": [
-    { "label": "Pending", "value": 7 },
-    { "label": "In Progress", "value": 4 },
-    { "label": "Completed Today", "value": 12 }
+    { "label": "Open across AFS", "value": 18 },
+    { "label": "AI-assisted", "value": 11 },
+    { "label": "Completed today", "value": 24 }
+  ],
+  "domains": [
+    { "id": "customer-care", "name": "Customer Care", "description": "Complaints, customer requests and case coordination", "pending": 7, "inProgress": 4, "sla": "2 due soon", "tone": "care" },
+    { "id": "technical-service", "name": "Technical Service", "description": "Technical diagnosis, escalations and TSARA support", "pending": 5, "inProgress": 6, "sla": "1 due soon", "tone": "technical" },
+    { "id": "warranty", "name": "Warranty", "description": "Coverage decisions, claims and policy exceptions", "pending": 6, "inProgress": 3, "sla": "On track", "tone": "warranty" }
   ],
   "workItems": [
     {
-      "process": "Customer Complaints & Quality Handling",
+      "domain": "Customer Care",
+      "process": "Customer Complaint Handling",
       "caseId": "CC-2026-0088",
-      "request": "Three Guarantees vehicle return",
+      "trigger": "Inbound customer call",
+      "intent": "Complaint · return candidate",
       "priority": "High",
-      "status": "Review required",
+      "status": "AI case created",
       "featured": true
     },
     {
+      "domain": "Warranty",
       "process": "Warranty Exception Review",
       "caseId": "WE-2026-0142",
-      "request": "Coverage exception",
+      "trigger": "Dealer submission",
+      "intent": "Coverage exception",
       "priority": "Medium",
       "status": "Due today",
       "featured": false
     },
     {
+      "domain": "Technical Service",
       "process": "Technical Support Escalation",
       "caseId": "TS-2026-0318",
-      "request": "Recurring fault",
+      "trigger": "TSARA escalation",
+      "intent": "Recurring power loss",
       "priority": "Medium",
       "status": "In review",
       "featured": false
+    },
+    {
+      "domain": "Customer Care",
+      "process": "Customer Complaint Handling",
+      "caseId": "CC-2026-0091",
+      "trigger": "Market regulation letter",
+      "intent": "Repair-delay complaint",
+      "priority": "Medium",
+      "status": "Dealer response due",
+      "featured": false
     }
-  ],
-  "processes": [
-    { "name": "Customer Complaints & Quality Handling", "pending": 3 },
-    { "name": "Warranty Exception Review", "pending": 2 },
-    { "name": "Technical Support Escalation", "pending": 2 }
   ]
 }

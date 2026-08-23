@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "My Process Management Center",
-  description: "Interactive customer complaints and quality handling demo.",
+  title: "AFS Process Management Center",
+  description: "AFS-wide AI-assisted process workbench demo.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

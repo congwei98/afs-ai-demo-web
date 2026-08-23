@@ -20,9 +20,9 @@ export type ReviewAgent = {
 };
 
 export const reviewPlanContext = {
-  objective: "Check the policy and suggest how BMW and the dealer should share the cost.",
+  objective: "Check policy applicability and return conditions before considering the customer remedy and internal allocation.",
   recommendation:
-    "Check the repair history, confirm the fault source, and compare similar cases before suggesting the cost share.",
+    "Verify scope, test every relevant return condition, trace the fault and parts timeline, then compare approved cases.",
   evidence: [
     { label: "Complaint", value: "Recurring loss of power" },
     { label: "Repair history", value: "Customer stated 3 visits" },
@@ -37,10 +37,10 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "BBS-A-4",
     role: "Data Agent",
     category: "warranty",
-    purpose: "Check repair count and policy fit",
-    requirement: "Get the repair and warranty records for this VIN. Count repairs for the same fault and check the Three Guarantees rule.",
-    resultSummary: "The same fault was repaired three times. The policy rule is met.",
-    decisionImpact: "Supports handling this case under Three Guarantees.",
+    purpose: "Verify coverage and repair history",
+    requirement: "Get the repair and warranty records for this VIN. Verify the Three Guarantees period and map the repair facts to each relevant rule without treating three visits as a standalone return condition.",
+    resultSummary: "Coverage is active. Three visits are verified, but that count alone does not meet the more-than-four-repairs condition.",
+    decisionImpact: "Confirms scope and prevents an incorrect repair-count conclusion; other independent conditions still require review.",
     evidence: {
       kind: "records",
       title: "Warranty & repair records",
@@ -48,7 +48,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
       rows: [
         { date: "18 Oct 2025", record: "RO-450218", finding: "Power loss reported; software reset performed" },
         { date: "02 Dec 2025", record: "RO-468011", finding: "Same symptom returned; control unit replaced", highlight: true },
-        { date: "11 Feb 2026", record: "RO-492674", finding: "Third repair attempt; issue remains unresolved", highlight: true },
+        { date: "11 Feb 2026", record: "RO-492674", finding: "Third repair attempt; issue remains unresolved (supporting fact, not a standalone threshold)", highlight: true },
       ],
     },
   },
@@ -60,8 +60,8 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     category: "technical",
     purpose: "Check the TSARA result and fault source",
     requirement: "Get the latest TSARA result. Check whether the fault comes from the product, is still open, and was not caused by dealer repair work.",
-    resultSummary: "TSARA says the fault comes from the product. No dealer-caused damage was found.",
-    decisionImpact: "Confirms the fault source. The cost share is checked separately.",
+    resultSummary: "TSARA classifies the recurring loss of driving power as a serious safety-performance fault that remains unresolved after two repair attempts. No dealer-caused damage was found.",
+    decisionImpact: "Supports a separate return-condition pathway; the final eligibility and remedy remain a human decision.",
     evidence: {
       kind: "diagnosis",
       title: "TSARA Result",
@@ -71,7 +71,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
           title: "TSARA Result TS-2026-117",
           date: "20 May 2026",
           statements: [
-            { text: "Intermittent power-control failure reproduced during road test." },
+            { text: "Intermittent loss of driving power reproduced during road test and classified as a serious safety-performance fault.", highlight: true },
             { text: "Root cause is assessed as an internal product issue; no evidence of dealer-induced damage.", highlight: true },
             { text: "Available repair measures cannot provide a stable resolution at this time.", highlight: true },
           ],
@@ -85,8 +85,8 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     system: "Enterprise Knowledge",
     role: "Knowledge Agent",
     category: "knowledge",
-    purpose: "Compare cost shares in similar cases",
-    requirement: "Find past Three Guarantees cases with the same fault and customer request. Compare the repair count and the BMW/dealer cost share.",
+    purpose: "Compare policy reasoning and internal allocations",
+    requirement: "Find approved cases with a comparable serious safety-performance fault and return request. Compare rule reasoning, evidence gaps and internal allocations without copying a historical outcome.",
     resultSummary: "The closest cases use BMW 20% and dealer 80%.",
     decisionImpact: "Supports BMW 20% and dealer 80% for this case.",
     evidence: {
@@ -94,7 +94,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
       title: "Comparable case analysis",
       summary: "Cases are ranked by product issue, customer request and repair-history similarity.",
       cases: [
-        { id: "CC-2025-1123", score: 96, issue: "Recurring power loss · close match", request: "Vehicle return · exact match", repairs: "3 repairs · exact match", outcome: "Applicable · BMW 20% / Dealer 80%", differences: "Same fault origin, repair count and customer request." },
+        { id: "CC-2025-1123", score: 94, issue: "Serious power-loss fault · close match", request: "Vehicle return · exact match", repairs: "2 failed attempts · rule pathway match", outcome: "Approved return · BMW 20% / Dealer 80%", differences: "Same safety classification; different vehicle model and repair dates." },
         { id: "CC-2025-0876", score: 88, issue: "High-voltage shutdown · close match", request: "Vehicle return · exact match", repairs: "4 repairs · close match", outcome: "Applicable · BMW 20% / Dealer 80%", differences: "One additional repair attempt; commercial allocation is the same." },
         { id: "CC-2025-0542", score: 67, issue: "Product control-unit fault · related", request: "Vehicle return · exact match", repairs: "1 repair · low match", outcome: "Not covered · case closed", differences: "Repair count was below the Three Guarantees threshold." },
       ],
@@ -150,15 +150,15 @@ export const optionalReviewAgents: ReviewAgent[] = [
 ];
 
 export const settlementRecommendation = {
-  type: "Suggested result",
-  title: "Apply Three Guarantees and share the cost",
-  applicability: "Applicable",
+  type: "AI assessment · human decision required",
+  title: "Likely eligible for vehicle return",
+  applicability: "Likely eligible",
   bmwShare: 20,
   dealerShare: 80,
-  summary: "The same fault remained after three repairs. It comes from the product. Similar cases support BMW 20% and dealer 80%.",
+  summary: "The vehicle is in scope and TSARA classifies the unresolved loss of driving power as a serious safety-performance fault after repeated repair attempts. Three visits are supporting history, not the standalone legal basis. Internal allocation is assessed separately.",
   conclusions: [
-    { id: "coverage", label: "Policy check", value: "Three Guarantees applies", agentId: "warranty", rationale: "The same fault remained after three repairs." },
+    { id: "coverage", label: "Scope & repair count", value: "In scope · 3 visits not standalone threshold", agentId: "warranty", rationale: "Coverage is active, while the more-than-four-repairs condition is not met by three visits alone." },
     { id: "origin", label: "Fault source", value: "Product issue", agentId: "technical", rationale: "TSARA found a product issue and no dealer-caused damage." },
-    { id: "allocation", label: "Cost share", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "The closest past cases used the same share." },
+    { id: "allocation", label: "Internal allocation", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "Comparable approved cases inform this internal proposal; it is not a statutory customer entitlement." },
   ],
 };
