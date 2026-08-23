@@ -52,7 +52,7 @@ import {
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
 import { historicalCalls, intakeDemo, type CallInsight, type ConversationLine, type HistoricalCall, type SemanticType } from "@/data/intake-demo";
-import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type EvidenceBlock, type ReviewAgent } from "@/data/review-plan";
+import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type AgentSources, type ReviewAgent } from "@/data/review-plan";
 
 type ReviewState = "plan" | "running" | "results";
 type ComplaintSource = "call" | "scan";
@@ -107,7 +107,7 @@ export default function ProcessApp() {
   const [reviewState, setReviewState] = useState<ReviewState>("plan");
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
-  const [recommendationEvidence, setRecommendationEvidence] = useState<string | null>(null);
+  const [resultAgentId, setResultAgentId] = useState<string | null>(null);
   const [source, setSource] = useState<ComplaintSource>("call");
   const [playing, setPlaying] = useState(false);
   const [caseCompleted, setCaseCompleted] = useState(false);
@@ -189,16 +189,17 @@ export default function ProcessApp() {
                 setReviewState("plan");
                 setAccessGranted(false);
               }}
+              onResult={setResultAgentId}
               onNext={() => setStage(5)}
             />
           )}
-          {stage === 5 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onEvidence={setRecommendationEvidence} onBack={() => setStage(4)} onConfirm={completeCase} />}
+          {stage === 5 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
           {stage === 6 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
       {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
-      {recommendationEvidence && <RecommendationEvidenceDrawer agent={plannedAgents.find((agent) => agent.id === recommendationEvidence) ?? recommendedReviewAgents.find((agent) => agent.id === recommendationEvidence)!} returnLabel={stage === 5 ? "Back to Recommendation & Decision" : "Back to Recommendation"} onClose={() => setRecommendationEvidence(null)} />}
+      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 5 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
     </main>
   );
 }
@@ -626,27 +627,11 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
   if (category === "warranty") return <ShieldCheck size={size} />;
   if (category === "technical") return <Wrench size={size} />;
   if (category === "knowledge") return <Books size={size} />;
-  if (category === "ocr") return <Scan size={size} />;
   return <Database size={size} />;
 }
 
-function AgentEvidence({ evidence }: { evidence: EvidenceBlock }) {
-  return (
-    <section className="inline-evidence">
-      <div className="inline-evidence-heading"><div><p>EVIDENCE</p><h4>{evidence.title}</h4></div><span><CheckCircle size={15} weight="fill" />Done</span></div>
-      <p className="evidence-explanation">{evidence.summary}</p>
-      {evidence.kind === "records" && <div className="evidence-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.record}><span>{row.date}</span><strong>{row.record}</strong><p>{row.finding}</p>{row.highlight && <b>Eligibility evidence</b>}</div>)}</div>}
-      {evidence.kind === "diagnosis" && <div className="diagnosis-document">{evidence.documents.map((document) => <article key={document.title}><header><FileText size={18} /><strong>{document.title}</strong><span>{document.date}</span></header>{document.statements.map((statement) => <p className={statement.highlight ? "highlight" : ""} key={statement.text}>{statement.highlight && <CheckCircle size={16} weight="fill" />}{statement.text}</p>)}</article>)}</div>}
-      {evidence.kind === "cases" && <div className="case-matches">{evidence.cases.map((item) => <article key={item.id}><div className="case-match-title"><strong>{item.id}</strong><span className={item.score >= 85 ? "high" : "medium"}>{item.score}% match</span></div><div className="match-dimensions"><span>{item.issue}</span><span>{item.request}</span><span className={item.score < 75 ? "difference" : ""}>{item.repairs}</span></div><p><b>Outcome:</b> {item.outcome}</p><small>{item.differences}</small></article>)}</div>}
-      {evidence.kind === "parts" && <div className="evidence-records parts-records">{evidence.rows.map((row) => <div className={row.highlight ? "highlight" : ""} key={row.order}><span>{row.date}</span><strong>{row.part}</strong><p>{row.order} · {row.result}</p>{row.highlight && <b>Over 30 days</b>}</div>)}</div>}
-      {evidence.kind === "ocr" && <div className="ocr-fields">{evidence.fields.map((field) => <div className={field.highlight ? "highlight" : ""} key={field.label}><span>{field.label}</span><strong>{field.value}</strong><small>{field.confidence} confidence</small></div>)}</div>}
-    </section>
-  );
-}
-
-function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onReplan, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onNext: () => void }) {
+function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onReplan, onResult, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void }) {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["warranty"]));
-  const [evidenceAgentId, setEvidenceAgentId] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [runCursor, setRunCursor] = useState(0);
@@ -676,13 +661,11 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
     return next;
   });
 
-  const toggleEvidence = (id: string) => setEvidenceAgentId((current) => current === id ? null : id);
-
   const updateAgent = (id: string, changes: Partial<ReviewAgent>) => setAgents((current) => current.map((agent) => agent.id === id ? { ...agent, ...changes } : agent));
 
   const addAgent = (agent: ReviewAgent) => {
     const sequence = agents.filter((item) => item.id.startsWith(`${agent.id}-`)).length + 1;
-    const newAgent = { ...agent, id: `${agent.id}-${sequence}`, name: agent.category === "parts" ? `New Data Agent ${sequence}` : `OCR Agent ${sequence}` };
+    const newAgent = { ...agent, id: `${agent.id}-${sequence}`, name: `New Data Agent ${sequence}` };
     setAgents((current) => [...current, newAgent]);
     setExpandedAgents((current) => new Set(current).add(newAgent.id));
     setAddOpen(false);
@@ -695,13 +678,11 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
       next.delete(id);
       return next;
     });
-    setEvidenceAgentId((current) => current === id ? null : current);
   };
 
   const replanAgents = () => {
     setRunCursor(0);
     setRunPhase("request");
-    setEvidenceAgentId(null);
     onReplan();
   };
 
@@ -737,20 +718,19 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
                   <div className="agent-robot-node">
                     <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Robot size={58} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
                     <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agent.role}</em><small>{status}</small></div>
-                    {state === "results" && <button onClick={() => toggleEvidence(agent.id)} aria-expanded={evidenceAgentId === agent.id}><Eye size={16} />{evidenceAgentId === agent.id ? "Hide Evidence" : "View Evidence"}</button>}
+                    {state === "results" && <button onClick={() => onResult(agent.id)}><Eye size={16} />View result</button>}
                   </div>
                 </div>;
               })}
             </div>
           </div>
           <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "The Process Agent has received and organized all selected Agent results." : runMessage}</p>
-          {state === "results" && evidenceAgentId && <div className="network-evidence"><AgentEvidence evidence={agents.find((agent) => agent.id === evidenceAgentId)!.evidence} /></div>}
         </section>
       )}
 
       {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
-      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "parts" ? "Data Agent" : "OCR Agent"}<small>{agent.category === "parts" ? "Define an additional review query" : "Read and validate complaint documents"}</small></strong><Plus size={18} /></button>)}</section>}
+      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>Data Agent<small>Define an additional data query</small></strong><Plus size={18} /></button>)}</section>}
 
       {state === "plan" && <div className="review-agent-list">
         {agents.map((agent, index) => {
@@ -775,7 +755,7 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
   );
 }
 
-function RecommendationScreen({ agents, instruction, setInstruction, onEvidence, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onEvidence: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
+function RecommendationScreen({ agents, instruction, setInstruction, onResult, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onResult: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
   const [reviewed, setReviewed] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   return (
@@ -798,7 +778,7 @@ function RecommendationScreen({ agents, instruction, setInstruction, onEvidence,
             {agents.map((agent) => <article key={agent.id}>
               <span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} /></span>
               <div><strong>{agent.name}</strong><p>{agent.resultSummary}</p><small>{agent.decisionImpact}</small></div>
-              <button onClick={() => onEvidence(agent.id)}><Eye size={17} aria-hidden="true" />Open source</button>
+              <button onClick={() => onResult(agent.id)}><Eye size={17} aria-hidden="true" />View result</button>
             </article>)}
           </div>}
         </section>
@@ -863,15 +843,70 @@ function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onC
   );
 }
 
-function RecommendationEvidenceDrawer({ agent, returnLabel, onClose }: { agent: ReviewAgent; returnLabel: string; onClose: () => void }) {
+function DataAgentSourcesView({ sources }: { sources: Extract<AgentSources, { type: "data" }> }) {
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
+  return (
+    <section className="agent-sources-view data-agent-sources" aria-labelledby="agent-sources-title">
+      <header><div><span>DATA SOURCES</span><h3 id="agent-sources-title">{sources.title}</h3></div><strong>{sources.records.length} {sources.records.length === 1 ? "record" : "records"}</strong></header>
+      <div className="data-source-head" aria-hidden="true"><span>Record</span><span>Extracted facts</span><span>Used in conclusion</span></div>
+      <div className="data-source-list">
+        {sources.records.map((record) => {
+          const expanded = expandedRecord === record.id;
+          return <article key={record.id}>
+            <div className="source-record-id"><strong>{record.id}</strong>{record.date && <span>{record.date}</span>}</div>
+            <ul>{record.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+            <div className="source-relevance"><p>{record.relevance}</p>{record.rawPreview && <button onClick={() => setExpandedRecord(expanded ? null : record.id)} aria-expanded={expanded}>{expanded ? "Hide raw record" : "View raw record"}</button>}</div>
+            {expanded && record.rawPreview && <div className="raw-source-preview"><FileText size={18} aria-hidden="true" /><p>{record.rawPreview}</p></div>}
+          </article>;
+        })}
+      </div>
+    </section>
+  );
+}
+
+function KnowledgeAgentSourcesView({ sources }: { sources: Extract<AgentSources, { type: "knowledge" }> }) {
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
+  return (
+    <section className="agent-sources-view knowledge-agent-sources" aria-labelledby="agent-sources-title">
+      <header><div><span>KNOWLEDGE MATCHES</span><h3 id="agent-sources-title">{sources.title}</h3></div><strong>{sources.matches.length} {sources.matches.length === 1 ? "match" : "matches"}</strong></header>
+      <div className="knowledge-match-list">
+        {sources.matches.map((match, index) => {
+          const expanded = expandedMatch === match.id;
+          return <article key={match.id}>
+            <div className="knowledge-match-rank">{String(index + 1).padStart(2, "0")}</div>
+            <div className="knowledge-match-body">
+              <header><div><span>{match.sourceType}</span><h4>{match.title}</h4><small>{match.id}</small></div><strong>{match.relevance}% relevant</strong></header>
+              <div className="knowledge-reasoning-grid">
+                <div><span>WHY IT MATCHED</span><ul>{match.matchedOn.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                <div><span>IMPORTANT DIFFERENCE</span><p>{match.caveat ?? "No material difference identified."}</p></div>
+                <div><span>USED IN CONCLUSION</span><p>{match.contribution}</p></div>
+              </div>
+              {match.excerpt && <><button className="source-excerpt-toggle" onClick={() => setExpandedMatch(expanded ? null : match.id)} aria-expanded={expanded}>{expanded ? "Hide source excerpt" : "View source excerpt"}</button>{expanded && <blockquote>{match.excerpt}</blockquote>}</>}
+            </div>
+          </article>;
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AgentResultDrawer({ agent, returnLabel, onClose }: { agent: ReviewAgent; returnLabel: string; onClose: () => void }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourceCount = agent.sources.type === "data" ? agent.sources.records.length : agent.sources.matches.length;
   return (
     <div className="overlay drawer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="drawer recommendation-evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-        <div className="drawer-heading"><div><p className="section-kicker">EVIDENCE</p><h2 id="drawer-title"><ReviewAgentIcon category={agent.category} size={25} />{agent.evidence.title}</h2><span>{agent.name} · {agent.system} · {agent.role}</span></div><button className="close-button" aria-label="Close evidence" onClick={onClose}><X size={22} /></button></div>
-        <section className="decision-linkage"><span>AGENT RESULT</span><div><strong>{agent.resultSummary}</strong></div><p>{agent.decisionImpact}</p></section>
-        <section className="evidence-query-detail"><div><span>TASK</span><p>{agent.requirement}</p></div><div><span>RESULT</span><p>{agent.resultSummary}</p></div><div><span>WHY IT MATTERS</span><p>{agent.decisionImpact}</p></div></section>
-        <AgentEvidence evidence={agent.evidence} />
-        <section className="evidence-audit"><div><span>Source system</span><strong>{agent.system}</strong></div><div><span>Case scope</span><strong>{caseData.id} · VIN {caseData.vin}</strong></div><div><span>Retrieved</span><strong>18 Aug 2026 · 14:32</strong></div><div><span>Access</span><strong>Read only · Case specific</strong></div></section>
+      <section className="drawer agent-result-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+        <div className="drawer-heading"><div><p className="section-kicker">AGENT RESULT</p><h2 id="drawer-title"><span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={24} /></span>{agent.name}</h2><span>{agent.role}</span></div><button className="close-button" aria-label="Close Agent result" onClick={onClose}><X size={22} /></button></div>
+        <section className="agent-result-overview">
+          <span>RESULT</span>
+          <h3>{agent.resultSummary}</h3>
+          <div><strong>Decision impact</strong><p>{agent.decisionImpact}</p></div>
+        </section>
+        <button className="view-sources-toggle" onClick={() => setSourcesOpen((open) => !open)} aria-expanded={sourcesOpen}>
+          <span><strong>View sources</strong><small>{sourceCount} supporting {agent.sources.type === "data" ? sourceCount === 1 ? "record" : "records" : sourceCount === 1 ? "knowledge match" : "knowledge matches"}</small></span>
+          <CaretDown size={21} className={sourcesOpen ? "expanded" : ""} aria-hidden="true" />
+        </button>
+        {sourcesOpen && (agent.sources.type === "data" ? <DataAgentSourcesView sources={agent.sources} /> : <KnowledgeAgentSourcesView sources={agent.sources} />)}
         <div className="drawer-footer"><button className="primary-button wide button-with-icon" onClick={onClose}><ArrowLeft size={18} />{returnLabel}</button></div>
       </section>
     </div>

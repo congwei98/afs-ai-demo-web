@@ -1,21 +1,26 @@
-export type EvidenceBlock =
-  | { kind: "records"; title: string; summary: string; rows: Array<{ date: string; record: string; finding: string; highlight?: boolean }> }
-  | { kind: "diagnosis"; title: string; summary: string; documents: Array<{ title: string; date: string; statements: Array<{ text: string; highlight?: boolean }> }> }
-  | { kind: "cases"; title: string; summary: string; cases: Array<{ id: string; score: number; issue: string; request: string; repairs: string; outcome: string; differences: string }> }
-  | { kind: "parts"; title: string; summary: string; rows: Array<{ date: string; part: string; order: string; result: string; highlight?: boolean }> }
-  | { kind: "ocr"; title: string; summary: string; fields: Array<{ label: string; value: string; confidence: string; highlight?: boolean }> };
+export type AgentSources =
+  | {
+      type: "data";
+      title: string;
+      records: Array<{ id: string; date?: string; facts: string[]; relevance: string; rawPreview?: string }>;
+    }
+  | {
+      type: "knowledge";
+      title: string;
+      matches: Array<{ id: string; title: string; sourceType: string; relevance: number; matchedOn: string[]; caveat?: string; contribution: string; excerpt?: string }>;
+    };
 
 export type ReviewAgent = {
   id: string;
   name: string;
   system: string;
-  role: "Data Agent" | "Knowledge Agent" | "Document Agent";
-  category: "warranty" | "technical" | "knowledge" | "parts" | "ocr";
+  role: "Data Agent" | "Knowledge Agent";
+  category: "warranty" | "technical" | "knowledge" | "parts";
   purpose: string;
   requirement: string;
   resultSummary: string;
   decisionImpact: string;
-  evidence: EvidenceBlock;
+  sources: AgentSources;
   addedBy?: "Human";
 };
 
@@ -41,14 +46,13 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     requirement: "Get the repair and warranty records for this VIN. Verify the Three Guarantees period and map the repair facts to each relevant rule without treating three visits as a standalone return condition.",
     resultSummary: "Coverage is active. Three visits are verified, but that count alone does not meet the more-than-four-repairs condition.",
     decisionImpact: "Confirms scope and prevents an incorrect repair-count conclusion; other independent conditions still require review.",
-    evidence: {
-      kind: "records",
+    sources: {
+      type: "data",
       title: "Warranty & repair records",
-      summary: "3 related repair orders found for the same loss-of-power symptom.",
-      rows: [
-        { date: "18 Oct 2025", record: "RO-450218", finding: "Power loss reported; software reset performed" },
-        { date: "02 Dec 2025", record: "RO-468011", finding: "Same symptom returned; control unit replaced", highlight: true },
-        { date: "11 Feb 2026", record: "RO-492674", finding: "Third repair attempt; issue remains unresolved (supporting fact, not a standalone threshold)", highlight: true },
+      records: [
+        { id: "RO-450218", date: "18 Oct 2025", facts: ["Power loss reported", "Software reset performed"], relevance: "Starts the recurring-fault history.", rawPreview: "Repair order confirms the first recorded loss-of-power complaint and software reset." },
+        { id: "RO-468011", date: "02 Dec 2025", facts: ["Same symptom returned", "Control unit replaced"], relevance: "Confirms the same fault returned after repair.", rawPreview: "Repair order records the repeated symptom and control-unit replacement." },
+        { id: "RO-492674", date: "11 Feb 2026", facts: ["Third repair attempt", "Issue remains unresolved"], relevance: "Supports repeated unsuccessful repair history; not a standalone legal threshold.", rawPreview: "Repair order confirms the third visit and unresolved customer complaint." },
       ],
     },
   },
@@ -62,20 +66,11 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     requirement: "Get the latest TSARA result. Check whether the fault comes from the product, is still open, and was not caused by dealer repair work.",
     resultSummary: "TSARA classifies the recurring loss of driving power as a serious safety-performance fault that remains unresolved after two repair attempts. No dealer-caused damage was found.",
     decisionImpact: "Supports a separate return-condition pathway; the final eligibility and remedy remain a human decision.",
-    evidence: {
-      kind: "diagnosis",
-      title: "TSARA Result",
-      summary: "Two decisive TSARA findings establish product responsibility and exclude dealer workmanship.",
-      documents: [
-        {
-          title: "TSARA Result TS-2026-117",
-          date: "20 May 2026",
-          statements: [
-            { text: "Intermittent loss of driving power reproduced during road test and classified as a serious safety-performance fault.", highlight: true },
-            { text: "Root cause is assessed as an internal product issue; no evidence of dealer-induced damage.", highlight: true },
-            { text: "Available repair measures cannot provide a stable resolution at this time.", highlight: true },
-          ],
-        },
+    sources: {
+      type: "data",
+      title: "Technical records",
+      records: [
+        { id: "TS-2026-117", date: "20 May 2026", facts: ["Serious safety-performance fault reproduced", "Product-related root cause", "No dealer-induced damage", "No stable repair measure available"], relevance: "Supports a separate vehicle-return condition based on the unresolved safety fault.", rawPreview: "TSARA road-test and root-cause statements used by the Technical Service Agent." },
       ],
     },
   },
@@ -89,14 +84,13 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     requirement: "Find approved cases with a comparable serious safety-performance fault and return request. Compare rule reasoning, evidence gaps and internal allocations without copying a historical outcome.",
     resultSummary: "The closest cases use BMW 20% and dealer 80%.",
     decisionImpact: "Supports BMW 20% and dealer 80% for this case.",
-    evidence: {
-      kind: "cases",
-      title: "Comparable case analysis",
-      summary: "Cases are ranked by product issue, customer request and repair-history similarity.",
-      cases: [
-        { id: "CC-2025-1123", score: 94, issue: "Serious power-loss fault · close match", request: "Vehicle return · exact match", repairs: "2 failed attempts · rule pathway match", outcome: "Approved return · BMW 20% / Dealer 80%", differences: "Same safety classification; different vehicle model and repair dates." },
-        { id: "CC-2025-0876", score: 88, issue: "High-voltage shutdown · close match", request: "Vehicle return · exact match", repairs: "4 repairs · close match", outcome: "Applicable · BMW 20% / Dealer 80%", differences: "One additional repair attempt; commercial allocation is the same." },
-        { id: "CC-2025-0542", score: 67, issue: "Product control-unit fault · related", request: "Vehicle return · exact match", repairs: "1 repair · low match", outcome: "Not covered · case closed", differences: "Repair count was below the Three Guarantees threshold." },
+    sources: {
+      type: "knowledge",
+      title: "Comparable knowledge matches",
+      matches: [
+        { id: "CC-2025-1123", title: "Approved serious power-loss return case", sourceType: "Approved case", relevance: 94, matchedOn: ["Same safety-performance fault", "Same vehicle-return request", "Same policy pathway"], caveat: "Different vehicle model and repair dates.", contribution: "Supports BMW 20% / Dealer 80% as an internal allocation reference.", excerpt: "Approved return after the safety-performance fault remained unresolved following two repair attempts." },
+        { id: "CC-2025-0876", title: "High-voltage shutdown return case", sourceType: "Approved case", relevance: 88, matchedOn: ["Comparable safety issue", "Same requested remedy", "Similar unsuccessful repair history"], caveat: "One additional repair attempt.", contribution: "Confirms the same internal allocation was used in a close case.", excerpt: "Vehicle return approved with BMW 20% / Dealer 80% internal allocation." },
+        { id: "CC-2025-0542", title: "Control-unit fault case", sourceType: "Closed case", relevance: 67, matchedOn: ["Related product fault", "Same vehicle-return request"], caveat: "Only one repair and no matching safety classification.", contribution: "Provides a counterexample and prevents copying an outcome without checking differences.", excerpt: "Return request was not approved because the evidence did not establish the same policy condition." },
       ],
     },
   },
@@ -113,36 +107,12 @@ export const optionalReviewAgents: ReviewAgent[] = [
     requirement: "Check BBS-A-3 for parts linked to these repairs. Compare order and arrival dates. Flag any key part that took more than 30 days.",
     resultSummary: "The power-control module took 36 days to arrive, 6 days over the limit.",
     decisionImpact: "Adds context about parts supply for the final decision.",
-    evidence: {
-      kind: "parts",
+    sources: {
+      type: "data",
       title: "Parts delivery timeline",
-      summary: "One critical replacement part exceeded the 30-day arrival threshold.",
-      rows: [
-        { date: "Ordered 03 Jan", part: "Power control module", order: "PO-88341", result: "Arrived 08 Feb · 36 days", highlight: true },
-        { date: "Ordered 12 Feb", part: "Control module harness", order: "PO-92407", result: "Arrived 24 Feb · 12 days" },
-      ],
-    },
-    addedBy: "Human",
-  },
-  {
-    id: "ocr",
-    name: "OCR Agent",
-    system: "Document Services",
-    role: "Document Agent",
-    category: "ocr",
-    purpose: "Check the scanned complaint against the call",
-    requirement: "Read the complaint scan. Get the customer, vehicle, issue, and request. Compare them with the call.",
-    resultSummary: "The scanned complaint matches the customer, vehicle, issue and return request in the call.",
-    decisionImpact: "Confirms the scan and the call describe the same complaint.",
-    evidence: {
-      kind: "ocr",
-      title: "Scanned complaint verification",
-      summary: "4 fields extracted and matched to the complaint record.",
-      fields: [
-        { label: "Customer", value: "Mr. Wang", confidence: "99%" },
-        { label: "Vehicle", value: "DEMO-VIN-0088", confidence: "99%" },
-        { label: "Issue", value: "Repeated loss of driving power", confidence: "96%", highlight: true },
-        { label: "Requested resolution", value: "Vehicle return", confidence: "98%", highlight: true },
+      records: [
+        { id: "PO-88341", date: "Ordered 03 Jan", facts: ["Power control module", "Arrived 08 Feb", "36-day delivery"], relevance: "Confirms the critical part exceeded the 30-day arrival threshold.", rawPreview: "Parts order and receipt timestamps show a 36-day delivery interval." },
+        { id: "PO-92407", date: "Ordered 12 Feb", facts: ["Control module harness", "Arrived 24 Feb", "12-day delivery"], relevance: "Provides the comparison record for a normal delivery interval.", rawPreview: "Parts order and receipt timestamps show a 12-day delivery interval." },
       ],
     },
     addedBy: "Human",
