@@ -305,8 +305,10 @@ type RouteInterpretation = { action: "confirm" | "modify" | "clarify"; destinati
 function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void; onModify: (target: string) => void }) {
   const [instruction, setInstruction] = useState("");
   const [interpretation, setInterpretation] = useState<RouteInterpretation | null>(null);
-  const updateRoutingAction = (nextInstruction: string) => {
+  const [showRouteAction, setShowRouteAction] = useState(false);
+  const updateRoutingAction = (nextInstruction: string, showAction = true) => {
     setInstruction(nextInstruction);
+    setShowRouteAction(showAction);
     const value = nextInstruction.trim().toLowerCase();
     if (/warranty|保修|质保/.test(value)) return setInterpretation({ action: "modify", destination: "Warranty Exception Review", domain: "Warranty", summary: "Override the AI suggestion and route this case to the Warranty domain." });
     if (/technical|tsara|技术/.test(value)) return setInterpretation({ action: "modify", destination: "Technical Service Escalation", domain: "Technical Service", summary: "Override the AI suggestion and route this case to Technical Service." });
@@ -315,7 +317,7 @@ function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void;
     setInterpretation({ action: "clarify", destination: "No action yet", domain: "Customer Care", summary: "The instruction does not identify whether to start or change the route. Add a destination or an explicit approval." });
   };
   const agreeWithAi = () => {
-    updateRoutingAction("I agree with the AI. Hand this case to the Three Guarantees Vehicle Return Process Agent.");
+    updateRoutingAction("I agree with the AI. Hand this case to the Three Guarantees Vehicle Return Process Agent.", false);
   };
   return (
     <section className="screen-panel routing-screen">
@@ -334,7 +336,7 @@ function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void;
         <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Agree with AI pre-fills the handoff instruction. You can edit it before executing the route.</p></div></div>
         <div className="command-examples" aria-label="Example routing instructions"><button onClick={agreeWithAi}>Agree with AI</button><button onClick={() => updateRoutingAction("Do not start the return process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => updateRoutingAction("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => updateRoutingAction("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
         <label htmlFor="route-instruction"><span>Your instruction</span><textarea id="route-instruction" placeholder="For example: Route this case to Warranty Exception Review." value={instruction} onChange={(event) => updateRoutingAction(event.target.value)} /></label>
-        {interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>ROUTING ACTION</span><strong>{interpretation.action === "confirm" ? "HAND_OFF_TO_PROCESS_AGENT" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
+        {showRouteAction && interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>ROUTING ACTION</span><strong>{interpretation.action === "confirm" ? "HAND_OFF_TO_PROCESS_AGENT" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
       </section>
       <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The route, human instruction, Process Agent handoff and CCO receipt are retained in one audit trail.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Hand off to Process Agent"}</button></div>
     </section>
