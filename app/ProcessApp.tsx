@@ -64,6 +64,7 @@ type DealerSubmission = {
 };
 
 const steps = ["Intake", "Route & CCO", "Dealer Evidence", "Review", "Decision", "Execution"];
+const reviewProcessAgentName = "Three Guarantees Vehicle Return Process Agent";
 
 const ccoCreationActions = [
   { title: "Build the complaint-case request", detail: "The Router passes the approved route, call evidence and customer context to the Execution Agent." },
@@ -708,11 +709,11 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
   };
 
   const activeAgent = agents[runCursor];
-  const runMessage = runCursor >= agents.length ? "All results are back. A7 is preparing the report." : runPhase === "request" ? `Sending a task to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is checking its source…` : `${activeAgent?.name} is sending the result to A7…`;
+  const runMessage = runCursor >= agents.length ? "All results are back. The Process Agent is preparing the report." : runPhase === "request" ? `Sending a task to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is checking its source…` : `${activeAgent?.name} is sending the result to the Process Agent…`;
 
   return (
     <section className="screen-panel review-plan-screen">
-      <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE (BBS-A-7) <RoleBadge>Planner</RoleBadge></p><h2>{state === "results" ? "Review Results" : state === "running" ? "Running Review" : "Review Plan"}</h2></div>{accessGranted ? <span className="success-pill">Access allowed</span> : <span className="ai-plan-badge"><MagicWand size={16} />AI-made plan</span>}</div>
+      <div className="screen-heading"><div><p className="section-kicker">{reviewProcessAgentName.toUpperCase()} <RoleBadge>Process Agent</RoleBadge></p><h2>{state === "results" ? "Review Results" : state === "running" ? "Running Review" : "Review Plan"}</h2></div>{accessGranted ? <span className="success-pill">Access allowed</span> : <span className="ai-plan-badge"><MagicWand size={16} />AI-made plan</span>}</div>
 
       {state === "plan" && <section className="plan-rationale">
         <div className="rationale-icon"><MagicWand size={22} /></div>
@@ -721,19 +722,19 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
       </section>}
 
       {(state === "running" || state === "results") && (
-        <section className={`agent-network ${state}`} aria-label="Customer Care agent orchestration">
-          <header className="network-heading"><div><span>AGENTS AT WORK</span><h3>{state === "running" ? "A7 is running the review" : "All results are ready"}</h3><p>{state === "running" ? "A7 sends each task and waits for the result." : "Open any Agent to see its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Working</> : <><CheckCircle size={16} weight="fill" />Done</>}</span></header>
+        <section className={`agent-network ${state}`} aria-label={`${reviewProcessAgentName} orchestration`}>
+          <header className="network-heading"><div><span>AGENTS AT WORK</span><h3>{state === "running" ? "The Process Agent is running the review" : "All results are ready"}</h3><p>{state === "running" ? "The Process Agent sends each task and waits for the result." : "Open any Agent to see its result and source records."}</p></div><span className={state === "running" ? "network-live" : "network-complete"}>{state === "running" ? <><span />Working</> : <><CheckCircle size={16} weight="fill" />Done</>}</span></header>
           <div className="network-canvas">
             <div className="planner-robot">
               <div className="robot-avatar planner" aria-hidden="true"><Robot size={72} weight="duotone" /><span><FlowArrow size={20} weight="bold" /></span></div>
-              <strong>Customer Care</strong><em>Planner Agent</em><small>BBS-A-7</small>
+              <strong>{reviewProcessAgentName}</strong><em>Process Agent</em><small>Return complaint review orchestration</small>
             </div>
             <div className="agent-network-list">
               {agents.map((agent, index) => {
                 const done = index < runCursor || state === "results";
                 const active = index === runCursor && state === "running";
                 const phase = active ? runPhase : done ? "complete" : "waiting";
-                const status = done ? "Result returned" : active ? runPhase === "working" ? "Working in source system" : runPhase === "return" ? "Returning result to A7" : "Request sent by A7" : "Waiting for request";
+                const status = done ? "Result returned" : active ? runPhase === "working" ? "Working in source system" : runPhase === "return" ? "Returning result to Process Agent" : "Request sent by Process Agent" : "Waiting for request";
                 return <div className={`network-agent-row ${done ? "done" : ""} ${active ? "active" : ""}`} key={agent.id}>
                   <div className={`agent-connection ${phase}`}><span className="network-packet">{runPhase === "return" && active ? <Check size={14} weight="bold" /> : <PaperPlaneTilt size={15} weight="fill" />}</span><b>{active ? runPhase === "return" ? "RESULT" : runPhase === "working" ? "PROCESSING" : "REQUEST" : done ? "RESULT RECEIVED" : "QUEUED"}</b></div>
                   <div className="agent-robot-node">
@@ -745,14 +746,14 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
               })}
             </div>
           </div>
-          <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "A7 has received and organized all selected Agent results." : runMessage}</p>
+          <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "The Process Agent has received and organized all selected Agent results." : runMessage}</p>
           {state === "results" && evidenceAgentId && <div className="network-evidence"><AgentEvidence evidence={agents.find((agent) => agent.id === evidenceAgentId)!.evidence} /></div>}
         </section>
       )}
 
       {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
-      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name, source and request.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "parts" ? "Data Agent" : "OCR Agent"}<small>{agent.category === "parts" ? "Connect a data source and define a query" : "Read and validate complaint documents"}</small></strong><Plus size={18} /></button>)}</section>}
+      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "parts" ? "Data Agent" : "OCR Agent"}<small>{agent.category === "parts" ? "Define an additional review query" : "Read and validate complaint documents"}</small></strong><Plus size={18} /></button>)}</section>}
 
       {state === "plan" && <div className="review-agent-list">
         {agents.map((agent, index) => {
@@ -768,7 +769,7 @@ function ReviewScreen({ state, accessGranted, agents, setAgents, onAccess, onRun
                 <span className="card-status">Ready</span>
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
-              {expanded && <div className="agent-card-body"><div className="agent-config-grid"><label><span><PencilSimple size={15} />Agent name <b>Editable</b></span><input aria-label={`${agent.name} name`} value={agent.name} onChange={(event) => updateAgent(agent.id, { name: event.target.value })} /></label><label><span><Database size={15} />Source system <b>Editable</b></span><input aria-label={`${agent.name} source system`} value={agent.system} onChange={(event) => updateAgent(agent.id, { system: event.target.value })} /></label></div><label><span><PencilSimple size={15} />Agent task <b>AI draft · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateAgent(agent.id, { requirement: event.target.value })} /></label></div>}
+              {expanded && <div className="agent-card-body"><label><span><PencilSimple size={15} />Agent name <b>Editable</b></span><input aria-label={`${agent.name} name`} value={agent.name} onChange={(event) => updateAgent(agent.id, { name: event.target.value })} /></label><label><span><PencilSimple size={15} />Agent task <b>AI draft · editable</b></span><textarea value={agent.requirement} onChange={(event) => updateAgent(agent.id, { requirement: event.target.value })} /></label></div>}
             </article>
           );
         })}
