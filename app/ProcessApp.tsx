@@ -78,21 +78,21 @@ type EditableAmountKey =
   | "bmwCoverHumanityCare"
   | "bmwCoverOther";
 
-const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Evidence", "Review", "CCO Case", "Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
 const dealerEvidenceAttachments: DealerAttachment[] = [
   { name: "Repair orders.pdf", type: "PDF", detail: "5 repair orders · same-issue history" },
   { name: "TSARA diagnosis report.pdf", type: "PDF", detail: "Technical finding · 20 May 2026" },
   { name: "Parts order timeline.xlsx", type: "XLSX", detail: "Order and arrival dates" },
   { name: "Customer contact record.pdf", type: "PDF", detail: "Dealer communication record" },
+  { name: "Dealer fact chronology.pdf", type: "PDF", detail: "Confirmed repair chronology and responsibility facts" },
 ];
 
 const ccoCreationActions = [
-  { title: "Hand over the approved route", detail: `The Router Agent hands the case and call evidence to the ${reviewProcessAgentName}.` },
-  { title: "Build the 3R Case request", detail: "The Process Agent prepares the CCO request with the approved route and customer context." },
-  { title: "Create the 3R Case in CCO", detail: "The Execution Agent calls CCO once with the Process Agent request and an idempotency key." },
+  { title: "Validate the final eligibility result", detail: "The Process Agent verifies that Review confirmed the 3R condition with sufficient evidence." },
+  { title: "Build the 3R Case request", detail: "The Process Agent prepares the CCO request with the confirmed eligibility result and evidence manifest." },
+  { title: "Create the 3R Case in CCO", detail: "The Execution Agent calls CCO once with the approved request and an idempotency key." },
   { title: "Receive the CCO 3R Case record", detail: "CCO generates the 3R Case ID and returns the created record." },
-  { title: "Set the asynchronous wait state", detail: "The Process Agent records WAITING_DEALER_EVIDENCE and closes this Route task." },
 ];
 
 function calculateBuybackSolution(solution: BuybackSolution): BuybackSolution {
@@ -154,10 +154,10 @@ export default function ProcessApp() {
   const [intakeAnalyzed, setIntakeAnalyzed] = useState(false);
   const [caseCompleted, setCaseCompleted] = useState(false);
   const [routeConfirmed, setRouteConfirmed] = useState(false);
-  const [routeExecutionStarted, setRouteExecutionStarted] = useState(false);
   const [ccoCaseCreated, setCcoCaseCreated] = useState(false);
   const [dealerMockOpen, setDealerMockOpen] = useState(false);
   const [dealerSubmission, setDealerSubmission] = useState<DealerSubmission | null>(null);
+  const [dealerSupplementRequired, setDealerSupplementRequired] = useState(false);
   const [routedDomain, setRoutedDomain] = useState<string | null>(null);
   const [buybackDraft, setBuybackDraft] = useState<BuybackSolution>(() => calculateBuybackSolution({ ...settlementRecommendation.solution }));
   const [decisionInstruction, setDecisionInstruction] = useState(createDecisionInstruction);
@@ -165,7 +165,7 @@ export default function ProcessApp() {
 
   const openCase = () => {
     setView("case");
-    setStage(dealerSubmission ? 4 : 1);
+    setStage(ccoCaseCreated ? 6 : dealerSubmission ? dealerSupplementRequired ? 3 : 4 : routeConfirmed ? 3 : 1);
     setReviewState("plan");
     setAccessGranted(false);
     setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
@@ -187,18 +187,28 @@ export default function ProcessApp() {
 
   const completeCase = () => {
     setCaseCompleted(false);
-    setStage(6);
+    setStage(7);
+  };
+
+  const dealerEvidenceComplete = (dealerSubmission?.attachments.length ?? 0) >= dealerEvidenceAttachments.length;
+
+  const acceptDealerSubmission = (submission: DealerSubmission) => {
+    setDealerSubmission(submission);
+    setDealerSupplementRequired(false);
+    setDealerMockOpen(false);
   };
 
   const timeline = useMemo(() => {
     const events = [
       { label: "Complaint received", done: stage > 1 || caseCompleted },
-      { label: "Route confirmed & CCO 3R Case created", done: routeConfirmed && ccoCaseCreated },
+      { label: "Possible 3R route confirmed", done: routeConfirmed },
       { label: "Dealer evidence received", done: Boolean(dealerSubmission) },
       { label: "Review plan prepared", done: stage > 4 || reviewState !== "plan" },
       { label: "Case access allowed", done: accessGranted },
       { label: "Agent review completed", done: reviewState === "results" || stage > 4 },
-      { label: "Recommendation prepared", done: stage >= 5 },
+      { label: "3R eligibility confirmed", done: stage >= 5 },
+      { label: "CCO 3R Case created", done: ccoCaseCreated },
+      { label: "Recommendation prepared", done: stage >= 6 },
       { label: "Case completed", done: caseCompleted },
     ];
     const firstPending = events.findIndex((event) => !event.done);
@@ -206,23 +216,22 @@ export default function ProcessApp() {
   }, [accessGranted, caseCompleted, ccoCaseCreated, dealerSubmission, reviewState, routeConfirmed, stage]);
 
   if (view === "workbench") return <>
-    <Workbench onOpen={openCase} onDealerMock={() => setDealerMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerSubmission={dealerSubmission} />
-    {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
+    <Workbench onOpen={openCase} onDealerMock={() => setDealerMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerSubmission={dealerSubmission} dealerSupplementRequired={dealerSupplementRequired} routeConfirmed={routeConfirmed} />
+    {dealerMockOpen && <DealerMockModal supplementMode={dealerSupplementRequired} existingSubmission={dealerSubmission} onCancel={() => setDealerMockOpen(false)} onSubmit={acceptDealerSubmission} />}
   </>;
 
   return (
     <main className="app-shell">
       <ProductHeader onHome={backToWorkbench} showProcess />
-      <StageStepper stage={stage} timeline={timeline} onSelect={(next) => next <= stage && setStage(next)} />
+      <StageStepper stage={stage} timeline={timeline} dealerSupplementRequired={dealerSupplementRequired} onSelect={(next) => next <= stage && setStage(next)} />
       <section className="case-layout">
         <div className="case-main">
           <CaseIdentity caseIdAvailable={ccoCaseCreated} stage={stage} />
           {stage === 1 && (
             <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} analyzed={intakeAnalyzed} setAnalyzed={setIntakeAnalyzed} onNext={() => setStage(2)} />
           )}
-          {stage === 2 && !routeExecutionStarted && <RoutingDecisionScreen onConfirm={() => { setRouteConfirmed(true); setRouteExecutionStarted(true); }} onModify={(target) => { setRoutedDomain(target); backToWorkbench(); }} />}
-          {stage === 2 && routeExecutionStarted && <CreateComplaintCaseExecution created={ccoCaseCreated} onCreated={() => setCcoCaseCreated(true)} onWorkbench={backToWorkbench} />}
-          {stage === 3 && <DealerEvidenceScreen submission={dealerSubmission} onOpenMock={() => setDealerMockOpen(true)} onContinue={() => setStage(4)} onWorkbench={backToWorkbench} />}
+          {stage === 2 && <RoutingDecisionScreen onConfirm={() => { setRouteConfirmed(true); setStage(3); }} onModify={(target) => { setRoutedDomain(target); backToWorkbench(); }} />}
+          {stage === 3 && <DealerEvidenceScreen submission={dealerSubmission} supplementRequired={dealerSupplementRequired} onOpenMock={() => setDealerMockOpen(true)} onContinue={() => setStage(4)} onWorkbench={backToWorkbench} />}
           {stage === 4 && (
             <ReviewScreen
               state={reviewState}
@@ -237,15 +246,23 @@ export default function ProcessApp() {
               dealerSubmission={dealerSubmission}
               onResult={setResultAgentId}
               onNext={() => setStage(5)}
+              evidenceComplete={dealerEvidenceComplete}
+              onRequestDealerSupplement={() => {
+                setDealerSupplementRequired(true);
+                setReviewState("plan");
+                setAccessGranted(false);
+                setStage(3);
+              }}
             />
           )}
-          {stage === 5 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
-          {stage === 6 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
+          {stage === 5 && <CreateComplaintCaseExecution created={ccoCaseCreated} onCreated={() => setCcoCaseCreated(true)} onNext={() => setStage(6)} />}
+          {stage === 6 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
+          {stage === 7 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
-      {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
-      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 5 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
+      {dealerMockOpen && <DealerMockModal supplementMode={dealerSupplementRequired} existingSubmission={dealerSubmission} onCancel={() => setDealerMockOpen(false)} onSubmit={acceptDealerSubmission} />}
+      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 6 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
     </main>
   );
 }
@@ -268,7 +285,7 @@ function DomainIcon({ tone, size = 25 }: { tone: string; size?: number }) {
   return <Headset size={size} />;
 }
 
-function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreated, dealerSubmission }: { onOpen: () => void; onDealerMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerSubmission: DealerSubmission | null }) {
+function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreated, dealerSubmission, dealerSupplementRequired, routeConfirmed }: { onOpen: () => void; onDealerMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerSubmission: DealerSubmission | null; dealerSupplementRequired: boolean; routeConfirmed: boolean }) {
   const [selectedDomain, setSelectedDomain] = useState(routedDomain ?? "Customer Care");
   const items = workbenchData.workItems.map((item) => item.caseId === caseData.id && routedDomain ? { ...item, domain: routedDomain, status: "Human-rerouted" } : item).filter((item) => item.domain === selectedDomain);
   const activeDomain = workbenchData.domains.find((domain) => domain.name === selectedDomain) ?? workbenchData.domains[0];
@@ -298,12 +315,14 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
               <div className="work-row table-header" role="row"><span>Process</span><span>Case</span><span>Trigger</span><span>Detected intent</span><span>Status</span><span>Action</span></div>
               {items.map((item) => {
                 const isDemo = item.caseId === caseData.id;
-                const waitingForDealer = isDemo && ccoCaseCreated && !dealerSubmission && !completed;
-                const reviewReady = isDemo && Boolean(dealerSubmission) && !completed;
-                const status = completed ? "Completed" : reviewReady ? "REVIEW_READY" : waitingForDealer ? "WAITING_DEALER_EVIDENCE" : item.status;
-                const actionLabel = completed ? "View" : reviewReady ? "Open Review" : waitingForDealer ? "Mock Dealer Submit" : "Open";
-                const action = waitingForDealer ? onDealerMock : onOpen;
-                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />{ccoCaseCreated ? "CCO 3R Case created" : "AI-created from call"}</small>}</strong><span>{isDemo && !ccoCaseCreated ? "Pending route" : item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={`${isDemo ? "case-status new" : "case-status"} ${waitingForDealer ? "waiting" : ""} ${reviewReady ? "ready" : ""}`}>{isDemo ? status : item.status}</b></span><span><button className={isDemo ? waitingForDealer ? "secondary-button" : "primary-button" : "text-button"} onClick={isDemo ? action : undefined} disabled={!isDemo}>{actionLabel}</button></span></div>;
+                const waitingForDealer = isDemo && routeConfirmed && !dealerSubmission && !completed;
+                const needsSupplement = isDemo && dealerSupplementRequired && !completed;
+                const reviewReady = isDemo && Boolean(dealerSubmission) && !dealerSupplementRequired && !ccoCaseCreated && !completed;
+                const decisionReady = isDemo && ccoCaseCreated && !completed;
+                const status = completed ? "Completed" : decisionReady ? "DECISION_READY" : needsSupplement ? "DEALER_SUPPLEMENT_REQUIRED" : reviewReady ? "REVIEW_READY" : waitingForDealer ? "WAITING_DEALER_EVIDENCE" : item.status;
+                const actionLabel = completed ? "View" : needsSupplement ? "Mock Dealer Supplement" : reviewReady ? "Open Review" : waitingForDealer ? "Mock Dealer Submit" : decisionReady ? "Open Decision" : "Open";
+                const action = waitingForDealer || needsSupplement ? onDealerMock : onOpen;
+                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{isDemo ? ccoCaseCreated ? "3R Case Handling" : "3R Pre-assessment" : item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />{ccoCaseCreated ? "CCO 3R Case created" : "AI-created from call"}</small>}</strong><span>{isDemo && !ccoCaseCreated ? "No CCO Case yet" : item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={`${isDemo ? "case-status new" : "case-status"} ${waitingForDealer || needsSupplement ? "waiting" : ""} ${reviewReady || decisionReady ? "ready" : ""}`}>{isDemo ? status : item.status}</b></span><span><button className={isDemo ? waitingForDealer || needsSupplement ? "secondary-button" : "primary-button" : "text-button"} onClick={isDemo ? action : undefined} disabled={!isDemo}>{actionLabel}</button></span></div>;
               })}
               {items.length === 0 && <div className="domain-empty"><CheckCircle size={24} /><strong>No active cases in this domain</strong><span>Select another process domain.</span></div>}
             </div>
@@ -314,14 +333,15 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
   );
 }
 
-function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: { label: string; done: boolean; active: boolean }[]; onSelect: (stage: number) => void }) {
+function StageStepper({ stage, timeline, dealerSupplementRequired, onSelect }: { stage: number; timeline: { label: string; done: boolean; active: boolean }[]; dealerSupplementRequired: boolean; onSelect: (stage: number) => void }) {
   const stageStatuses = [
     timeline[0].done ? "Complaint captured" : "Current step",
-    timeline[1].done ? "CCO 3R Case created" : stage === 2 ? "Human gate / CCO creation" : "Pending",
-    timeline[2].done ? "Submission received" : stage === 3 ? "Waiting externally" : "Pending",
-    timeline[5].done ? "Review completed" : timeline[4].done ? "Agents executing" : stage === 4 ? "Plan approval" : "Pending",
-    stage > 5 ? "Decision submitted" : stage === 5 ? "Human decision" : "Pending",
-    timeline[7].done ? "Case completed" : stage === 6 ? "Automation running" : "Pending",
+    timeline[1].done ? "Possible 3R confirmed" : stage === 2 ? "Human pre-check" : "Pending",
+    dealerSupplementRequired ? "Supplement required" : timeline[2].done ? "Submission received" : stage === 3 ? "Waiting externally" : "Pending",
+    timeline[5].done ? timeline[6].done ? "Eligibility confirmed" : "Evidence review" : timeline[4].done ? "Agents executing" : stage === 4 ? "Plan approval" : "Pending",
+    timeline[7].done ? "CCO 3R Case created" : stage === 5 ? "Creating CCO Case" : "Pending",
+    stage > 6 ? "Decision submitted" : stage === 6 ? "Human decision" : "Pending",
+    timeline[9].done ? "Case completed" : stage === 7 ? "Automation running" : "Pending",
   ];
   return (
     <nav className="stepper compact" aria-label="Case progress">
@@ -349,11 +369,18 @@ function CaseIdentity({ caseIdAvailable, stage }: { caseIdAvailable: boolean; st
     ["Wholesale Dealer Code & Name", `${vehicle.wholesaleDealer.code} · ${vehicle.wholesaleDealer.name}`],
     ["Mediated By Third Party", vehicle.mediatedByThirdParty],
   ];
-  const preCaseLabel = stage === 1 ? "INTAKE CONTEXT" : "ROUTE IN PROGRESS";
-  const preCaseTitle = stage === 1 ? "Inbound vehicle-return complaint" : "Creating 3R Case in CCO";
+  const preCaseContext = stage === 1
+    ? { label: "INTAKE CONTEXT", title: "Inbound vehicle-return complaint" }
+    : stage === 2
+      ? { label: "3R PRE-CHECK", title: "Assessing a possible 3R path" }
+      : stage === 3
+        ? { label: "DEALER EVIDENCE", title: "Collecting pre-case facts" }
+        : stage === 4
+          ? { label: "FINAL 3R REVIEW", title: "Verifying 3R eligibility" }
+          : { label: "CCO CASE CREATION", title: "Creating 3R Case in CCO" };
   return (
     <section className="case-identity" aria-labelledby="case-identity-title">
-      <header><span className="case-identity-icon"><FolderOpen size={24} aria-hidden="true" /></span><div><span>{caseIdAvailable ? "3R CASE" : preCaseLabel}</span><strong id="case-identity-title">{caseIdAvailable ? caseData.id : preCaseTitle}</strong><small><Car size={15} aria-hidden="true" />{vehicle.model} · {vehicle.vin}</small></div></header>
+      <header><span className="case-identity-icon"><FolderOpen size={24} aria-hidden="true" /></span><div><span>{caseIdAvailable ? "3R CASE" : preCaseContext.label}</span><strong id="case-identity-title">{caseIdAvailable ? caseData.id : preCaseContext.title}</strong><small><Car size={15} aria-hidden="true" />{vehicle.model} · {vehicle.vin}</small></div></header>
       <dl className="case-identity-details">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     </section>
   );
@@ -372,37 +399,37 @@ function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void;
     if (/warranty|保修|质保/.test(value)) return setInterpretation({ action: "modify", destination: "Warranty Exception Review", domain: "Warranty", summary: "Override the AI suggestion and route this case to the Warranty domain." });
     if (/technical|tsara|技术/.test(value)) return setInterpretation({ action: "modify", destination: "Technical Service Escalation", domain: "Technical Service", summary: "Override the AI suggestion and route this case to Technical Service." });
     if (/other complaint|not a buyback|普通投诉|其他投诉|不是退车|不进入退车/.test(value)) return setInterpretation({ action: "modify", destination: "Customer Care · Other Complaint Queue", domain: "Customer Care", summary: "Keep the complaint in Customer Care without starting the 3R Buyback Process Agent." });
-    if (/agree|confirm|start|proceed|create|buyback|同意|确认|启动|进入退车|创建/.test(value)) return setInterpretation({ action: "confirm", destination: reviewProcessAgentName, domain: "Customer Care", summary: "Accept the AI route and hand the case from the Router Agent to the 3R Buyback Process Agent." });
+    if (/agree|confirm|start|proceed|buyback|同意|确认|启动|进入退车/.test(value)) return setInterpretation({ action: "confirm", destination: reviewProcessAgentName, domain: "Customer Care", summary: "Accept the possible 3R route and ask the Process Agent to collect dealer facts before final eligibility review." });
     setInterpretation({ action: "clarify", destination: "No action yet", domain: "Customer Care", summary: "The instruction does not identify whether to start or change the route. Add a destination or an explicit approval." });
   };
   const agreeWithAi = () => {
-    updateRoutingAction("I agree with the AI. Hand this case to the 3R Buyback Process Agent.", false);
+    updateRoutingAction("I agree this may be a 3R request. Hand it to the 3R Buyback Process Agent and request dealer facts before final review.", false);
   };
   return (
     <section className="screen-panel routing-screen">
       <div className="screen-heading"><div><p className="section-kicker">LEADING / ROUTER AGENT</p><h2>Review AI Routing Suggestion</h2></div></div>
       <section className="routing-summary">
-        <div className="routing-score"><MagicWand size={26} aria-hidden="true" /><span>ROUTING SUGGESTION</span><strong>Vehicle-return complaint candidate</strong><small>94% confidence · Decision RD-0096 v1</small></div>
+        <div className="routing-score"><MagicWand size={26} aria-hidden="true" /><span>PRELIMINARY 3R SUGGESTION</span><strong>Possible 3R vehicle-return complaint</strong><small>94% confidence · Decision RD-0096 v1</small></div>
         <div className="routing-facts">
           <article><span>Complaint classification</span><strong>COMPLAINT</strong><p>Recurring unresolved fault, safety concern and a requested remedy.</p></article>
-          <article><span>Customer request</span><strong>VEHICLE_RETURN_REQUEST</strong><p>The customer explicitly asks to return the vehicle under the 3R policy.</p></article>
-          <article><span>Approved next action</span><strong>HAND_OFF_TO_BUYBACK_PROCESS_AGENT</strong><p>After human confirmation, the Router Agent hands the case to the Process Agent, which then creates the CCO 3R Case.</p></article>
-          <article className="caution"><span>Important boundary</span><strong>Not an eligibility decision</strong><p>The customer reports five same-issue repairs. Warranty must verify the records before the 3R condition is accepted.</p></article>
+          <article><span>Customer request</span><strong>VEHICLE_RETURN_REQUEST</strong><p>The customer asks to return the vehicle. BMW has not yet classified the remedy as Buyback.</p></article>
+          <article><span>Approved next action</span><strong>REQUEST_DEALER_FACTS</strong><p>After human confirmation, the Process Agent requests offline dealer facts before any final 3R decision.</p></article>
+          <article className="caution"><span>Important boundary</span><strong>No CCO Case yet</strong><p>Warranty and dealer evidence must confirm the 3R condition before a CCO 3R Case can be created.</p></article>
         </div>
       </section>
-      <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want to return the vehicle under the 3R policy.”</h3></div></header><div><span className="signal-tag">Explicit vehicle-return request</span><span className="signal-tag">5 reported repair visits</span><span className="risk-tag">Safety concern</span></div></section>
+      <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want to return the vehicle.”</h3></div></header><div><span className="signal-tag">Explicit vehicle-return request</span><span className="signal-tag">5 reported repair visits</span><span className="risk-tag">Needs dealer verification</span></div></section>
       <section className="nl-routing-command">
         <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Agree with AI pre-fills the handoff instruction. You can edit it before executing the route.</p></div></div>
         <div className="command-examples" aria-label="Example routing instructions"><button onClick={agreeWithAi}>Agree with AI</button><button onClick={() => updateRoutingAction("Do not start the Buyback process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => updateRoutingAction("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => updateRoutingAction("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
         <label htmlFor="route-instruction"><span>Your instruction</span><textarea id="route-instruction" placeholder="For example: Route this case to Warranty Exception Review." value={instruction} onChange={(event) => updateRoutingAction(event.target.value)} /></label>
         {showRouteAction && interpretation && <div className={`route-interpretation ${interpretation.action}`} role="status" aria-live="polite"><div><span>ROUTING ACTION</span><strong>{interpretation.action === "confirm" ? "HAND_OFF_TO_PROCESS_AGENT" : interpretation.action === "modify" ? "MODIFY_ROUTE" : "NEEDS_CLARIFICATION"}</strong></div><div><span>DESTINATION</span><strong>{interpretation.destination}</strong></div><p>{interpretation.summary}</p></div>}
       </section>
-      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The route, human instruction, Process Agent handoff and CCO receipt are retained in one audit trail.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Hand off to Process Agent"}</button></div>
+      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />The preliminary decision and human instruction are retained before dealer evidence collection starts.</span><button className="primary-button wide button-with-icon" onClick={() => interpretation?.action === "confirm" ? onConfirm() : interpretation?.action === "modify" ? onModify(interpretation.domain) : undefined} disabled={!interpretation || interpretation.action === "clarify"}><CheckCircle size={18} />{interpretation?.action === "modify" ? "Apply modified routing" : "Request Dealer Evidence"}</button></div>
     </section>
   );
 }
 
-function CreateComplaintCaseExecution({ created, onCreated, onWorkbench }: { created: boolean; onCreated: () => void; onWorkbench: () => void }) {
+function CreateComplaintCaseExecution({ created, onCreated, onNext }: { created: boolean; onCreated: () => void; onNext: () => void }) {
   const [phase, setPhase] = useState(created ? ccoCreationActions.length : 0);
 
   useEffect(() => {
@@ -416,57 +443,62 @@ function CreateComplaintCaseExecution({ created, onCreated, onWorkbench }: { cre
   }, [created, onCreated, phase]);
 
   const complete = created || phase >= ccoCreationActions.length;
-  const currentMessage = complete ? `CCO 3R Case ${caseData.id} was created. The Route task is complete.` : ccoCreationActions[phase].detail;
+  const currentMessage = complete ? `CCO 3R Case ${caseData.id} was created after final eligibility confirmation.` : ccoCreationActions[phase].detail;
   return (
     <section className="screen-panel cco-create-screen">
-      <div className="screen-heading"><div><p className="section-kicker">ROUTE EXECUTION</p><h2>{complete ? "CCO 3R Case Created" : "Creating 3R Case in CCO"}</h2></div></div>
-      <section className="execution-network cco-create-network" aria-label="The Router hands the case to the 3R Buyback Process Agent, which creates a 3R Case in CCO through the Execution Agent">
-        <header><span>LIVE EXECUTION</span><h3>Router Agent → Process Agent → Execution Agent → CCO</h3><p>The Route decision is not complete until the Process Agent receives the CCO 3R Case record.</p></header>
+      <div className="screen-heading"><div><p className="section-kicker">3R ELIGIBILITY CONFIRMED</p><h2>{complete ? "CCO 3R Case Created" : "Creating 3R Case in CCO"}</h2></div></div>
+      <section className="execution-network cco-create-network" aria-label="After final 3R confirmation, the Process Agent creates a 3R Case in CCO through the Execution Agent">
+        <header><span>LIVE EXECUTION</span><h3>Review Result → Process Agent → Execution Agent → CCO</h3><p>CCO creation starts only after Review confirms sufficient evidence and final 3R eligibility.</p></header>
         <div className="execution-flow">
-          <div className={`execution-node agent-node ${phase > 0 ? "done" : "active"}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>Router Agent</strong><em>Leading Agent</em><small>Approved route RD-0096 v1</small></div>
-          <div className={`execution-link ${phase === 0 ? "active" : phase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 0 ? "HANDOFF" : "HANDED OFF"}</b></div>
+          <div className={`execution-node agent-node ${phase > 0 ? "done" : "active"}`}><div className="robot-avatar planner"><ShieldCheck size={64} weight="duotone" /></div><strong>3R Eligibility Confirmed</strong><em>Review result</em><small>5 same-issue repairs verified</small></div>
+          <div className={`execution-link ${phase === 0 ? "active" : phase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 0 ? "VALIDATING" : "VALIDATED"}</b></div>
           <div className={`execution-node agent-node process-agent-node ${phase >= 2 ? "done" : phase > 0 ? "active" : ""}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>{reviewProcessAgentName}</strong><em>Process Agent</em><small>Owns the Buyback complaint process</small></div>
           <div className={`execution-link ${phase === 1 ? "active" : phase > 1 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase === 1 ? "SENDING CASE REQUEST" : phase > 1 ? "REQUEST SENT" : "WAITING"}</b></div>
-          <div className={`execution-node agent-node ${phase >= 4 ? "done" : phase > 1 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><UploadSimple size={18} weight="bold" /></span></div><strong>Execution &amp; Automation</strong><em>Execution Agent</em><small>Creates the 3R Case once</small></div>
-          <div className={`execution-link ${phase > 1 && phase < 5 ? "active" : phase >= 5 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 5 ? "CASE RETURNED" : phase > 1 ? "WORKING IN CCO" : "WAITING"}</b></div>
+          <div className={`execution-node agent-node ${phase >= 3 ? "done" : phase > 1 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><UploadSimple size={18} weight="bold" /></span></div><strong>Execution &amp; Automation</strong><em>Execution Agent</em><small>Creates the 3R Case once</small></div>
+          <div className={`execution-link ${phase > 1 && phase < 4 ? "active" : phase >= 4 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 4 ? "CASE RETURNED" : phase > 1 ? "WORKING IN CCO" : "WAITING"}</b></div>
           <div className={`cco-system ${complete ? "done" : phase > 2 ? "active" : ""}`}><div className="system-window"><span /><span /><span /><SquaresFour size={34} weight="duotone" /></div><strong>CCO</strong><em>Existing system</em><small>Create 3R Case</small></div>
         </div>
         <p className="execution-status" role="status" aria-live="polite"><span className={complete ? "map-check" : "spinner"}>{complete && <Check size={12} weight="bold" />}</span>{currentMessage}</p>
       </section>
-      {complete && <section className="route-complete-banner"><CheckCircle size={28} weight="fill" /><div><strong>Route task complete · 3R Case ID generated</strong><span>CCO 3R Case {caseData.id} · Status <b>WAITING_DEALER_EVIDENCE</b> · Idempotency key verified</span></div></section>}
-      <div className="screen-actions completion-actions"><span>Next event: <b>DealerSubmissionCompleted</b></span><button className="primary-button wide button-with-icon" disabled={!complete} onClick={onWorkbench}><ArrowLeft size={18} />Return to Workbench</button></div>
+      {complete && <section className="route-complete-banner"><CheckCircle size={28} weight="fill" /><div><strong>Final 3R confirmation recorded · Case ID generated</strong><span>CCO 3R Case {caseData.id} · Status <b>DECISION_READY</b> · Idempotency key verified</span></div></section>}
+      <div className="screen-actions completion-actions"><span>Next step: <b>Recommendation &amp; Decision</b></span><button className="primary-button wide button-with-icon" disabled={!complete} onClick={onNext}>Continue to Decision<ArrowRight size={18} /></button></div>
     </section>
   );
 }
 
-function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench }: { submission: DealerSubmission | null; onOpenMock: () => void; onContinue: () => void; onWorkbench: () => void }) {
+function DealerEvidenceScreen({ submission, supplementRequired, onOpenMock, onContinue, onWorkbench }: { submission: DealerSubmission | null; supplementRequired: boolean; onOpenMock: () => void; onContinue: () => void; onWorkbench: () => void }) {
+  const evidenceReady = Boolean(submission) && !supplementRequired;
   return (
     <section className="screen-panel dealer-wait-screen">
-      <div className="screen-heading"><div><p className="section-kicker">3R BUYBACK PROCESS AGENT</p><h2>{submission ? "Dealer Submission Received" : "Waiting for Dealer Evidence"}</h2></div><span className={submission ? "success-pill" : "waiting-pill"}>{submission ? <><CheckCircle size={16} weight="fill" />Event received</> : <><Hourglass size={16} />Asynchronous wait</>}</span></div>
-      <section className="cco-case-created"><div className="cco-icon"><SquaresFour size={28} /></div><div><span>CCO 3R CASE CREATED</span><h3>{caseData.id}</h3><p>Created once from Call ID CALL-DEMO-0096 · Status <b>{submission ? "DEALER_SUBMISSION_RECEIVED" : "WAITING_DEALER_EVIDENCE"}</b></p></div><strong>Idempotency key verified</strong></section>
+      <div className="screen-heading"><div><p className="section-kicker">3R BUYBACK PROCESS AGENT</p><h2>{supplementRequired ? "Dealer Supplement Required" : submission ? "Dealer Submission Received" : "Waiting for Dealer Evidence"}</h2></div><span className={evidenceReady ? "success-pill" : "waiting-pill"}>{evidenceReady ? <><CheckCircle size={16} weight="fill" />Event received</> : <><Hourglass size={16} />Asynchronous wait</>}</span></div>
+      <section className="cco-case-created pre-case-evidence"><div className="cco-icon"><ClipboardText size={28} /></div><div><span>PRE-CASE EVIDENCE COLLECTION</span><h3>Call ID CALL-DEMO-0096</h3><p>Preliminary result <b>POSSIBLE_3R</b> · <b>NO CCO CASE YET</b></p></div><strong>Offline dealer follow-up</strong></section>
       {!submission ? <>
-        <section className="async-boundary"><div className="async-visual"><div><Robot size={42} weight="duotone" /><span>Process Agent</span></div><i /><div><Buildings size={42} weight="duotone" /><span>Dealer in CCO</span></div></div><div><span>PROCESS PAUSED AT EXTERNAL EVENT</span><h3>The Review Plan cannot start yet</h3><p>The dealer must contact the customer and submit evidence in CCO. The Process Agent resumes only after receiving <code>DealerSubmissionCompleted</code>.</p></div></section>
+        <section className="async-boundary"><div className="async-visual"><div><Robot size={42} weight="duotone" /><span>Process Agent</span></div><i /><div><Buildings size={42} weight="duotone" /><span>Dealer offline</span></div></div><div><span>PROCESS PAUSED AT EXTERNAL EVENT</span><h3>The Review Plan cannot start yet</h3><p>The dealer follows up offline and submits the facts to Workbench. The Process Agent resumes only after receiving <code>DealerSubmissionCompleted</code>.</p></div></section>
         <section className="evidence-checklist"><header><ListChecks size={21} /><div><span>DEALER EVIDENCE REQUEST</span><h3>4 required evidence groups</h3></div></header>{["Customer communication summary", "Repair orders and diagnosis records", "TSARA / technical evidence", "Parts orders and arrival timeline"].map((item) => <div key={item}><span /><strong>{item}</strong><small>Waiting</small></div>)}</section>
-      </> : <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>DEALER SUBMISSION COMPLETED</span><h3>External event accepted and matched to {caseData.id}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.attachments.length} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>}
-      <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={submission ? onWorkbench : onOpenMock}>{submission ? <ArrowLeft size={18} /> : <Buildings size={18} />}{submission ? "Back to Workbench" : "Open Dealer CCO Mock"}</button><button className="primary-button wide button-with-icon" onClick={onContinue} disabled={!submission}>Generate Review Plan<ArrowRight size={18} /></button></div>
+      </> : <>
+        <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>{supplementRequired ? "DEALER FACTS V1 RETAINED" : "DEALER SUBMISSION COMPLETED"}</span><h3>{supplementRequired ? "Review found one remaining evidence gap" : "External event accepted and matched to Call ID CALL-DEMO-0096"}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.attachments.length} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>
+        {supplementRequired && <section className="evidence-gap-panel" role="alert"><WarningCircle size={24} weight="fill" /><div><span>REVIEW RETURNED FOR SUPPLEMENT</span><h3>Dealer fact chronology is missing</h3><p>Confirm the repair chronology and responsibility facts offline, then submit the additional document. Review will rerun against the new evidence version.</p></div></section>}
+      </>}
+      <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={supplementRequired || !submission ? onOpenMock : onWorkbench}>{supplementRequired || !submission ? <Buildings size={18} /> : <ArrowLeft size={18} />}{supplementRequired ? "Mock Dealer Supplement" : submission ? "Back to Workbench" : "Open Dealer Mock"}</button><button className="primary-button wide button-with-icon" onClick={onContinue} disabled={!evidenceReady}>{supplementRequired ? "Waiting for Supplement" : "Generate Review Plan"}<ArrowRight size={18} /></button></div>
     </section>
   );
 }
 
-function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
-  const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
-  const [files, setFiles] = useState([true, true, true, true]);
+function DealerMockModal({ supplementMode = false, existingSubmission, onCancel, onSubmit }: { supplementMode?: boolean; existingSubmission?: DealerSubmission | null; onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
+  const availableAttachments = supplementMode ? dealerEvidenceAttachments : dealerEvidenceAttachments.slice(0, 4);
+  const [summary, setSummary] = useState(existingSubmission?.contactSummary ?? "Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
+  const [files, setFiles] = useState(availableAttachments.map(() => true));
   const ready = summary.trim().length >= 20 && files.every(Boolean);
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
       <section className="modal dealer-mock" role="dialog" aria-modal="true" aria-labelledby="dealer-mock-title">
-        <div className="mock-banner"><Buildings size={21} /><span>DEMO MOCK · EXTERNAL CCO DEALER VIEW</span></div>
-        <h2 id="dealer-mock-title">Complete Dealer Evidence</h2>
-        <p className="modal-intro">This simulates the dealer completing the real CCO task. Closing this window does not advance the process.</p>
+        <div className="mock-banner"><Buildings size={21} /><span>DEMO MOCK · OFFLINE DEALER INPUT</span></div>
+        <h2 id="dealer-mock-title">{supplementMode ? "Supplement Dealer Facts" : "Complete Dealer Evidence"}</h2>
+        <p className="modal-intro">{supplementMode ? "This simulates the dealer responding to the Review evidence gap." : "This simulates the dealer completing the offline follow-up before final 3R review."} Closing this window does not advance the process.</p>
         <label><span>Customer communication summary</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
-        <fieldset><legend>Evidence manifest</legend>{dealerEvidenceAttachments.map((attachment, index) => <label key={attachment.name}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{attachment.name}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
+        <fieldset><legend>Evidence manifest</legend>{availableAttachments.map((attachment, index) => <label key={attachment.name}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{attachment.name}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
         <div className="event-preview"><code>DealerSubmissionCompleted</code><span>Emitted only after this form is submitted</span></div>
-        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: "23 Aug 2026 · 14:42", attachments: dealerEvidenceAttachments.filter((_, index) => files[index]) })}><CheckCircle size={18} />Submit evidence to CCO</button></div>
+        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: supplementMode ? "24 Aug 2026 · 09:18" : "23 Aug 2026 · 14:42", attachments: availableAttachments.filter((_, index) => files[index]) })}><CheckCircle size={18} />{supplementMode ? "Submit supplement" : "Submit dealer evidence"}</button></div>
       </section>
     </div>
   );
@@ -612,7 +644,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, analyzed, setAna
   return (
     <section className="screen-panel intake-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
-      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT DRAFT</span><strong>Prepared automatically from inbound call intent</strong><p>Intent detected: complaint · explicit vehicle-return request. A CCO 3R Case will be created only after the Route decision is approved and executed.</p></div><b>Route review required</b></section>
+      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT DRAFT</span><strong>Prepared automatically from inbound call intent</strong><p>Intent detected: complaint · explicit vehicle-return request. Route will only judge whether a 3R path is possible; the CCO 3R Case is created after dealer evidence and final Review.</p></div><b>Route review required</b></section>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
@@ -691,7 +723,7 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
   return <Database size={size} />;
 }
 
-function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, onRunComplete, onReplan, onResult, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; dealerSubmission: DealerSubmission | null; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void }) {
+function ReviewScreen({ state, agents, setAgents, dealerSubmission, evidenceComplete, onAccess, onRunComplete, onReplan, onResult, onNext, onRequestDealerSupplement }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; dealerSubmission: DealerSubmission | null; evidenceComplete: boolean; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void; onRequestDealerSupplement: () => void }) {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["warranty"]));
   const [contextOpen, setContextOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -795,9 +827,13 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
               })}
             </div>
           </div>
-          <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : "map-check"}>{state === "results" && <Check size={12} weight="bold" />}</span>{state === "results" ? "The Process Agent has received and organized all selected Agent results." : runMessage}</p>
+          <p className="network-status" role="status" aria-atomic="true"><span className={state === "running" ? "spinner" : evidenceComplete ? "map-check" : "map-warning"}>{state === "results" && (evidenceComplete ? <Check size={12} weight="bold" /> : <WarningCircle size={14} weight="fill" />)}</span>{state === "results" ? evidenceComplete ? "The Process Agent confirmed sufficient evidence and final 3R eligibility." : "The Process Agent found an evidence gap and cannot make the final 3R decision yet." : runMessage}</p>
         </section>
       )}
+
+      {state === "results" && !evidenceComplete && <section className="evidence-gap-panel review-gap" role="alert"><WarningCircle size={26} weight="fill" /><div><span>INSUFFICIENT INFORMATION</span><h3>Return to Dealer Evidence before final 3R confirmation</h3><p>The five repair records appear to meet the repair-count threshold, but the dealer fact chronology is missing. No CCO Case can be created until the dealer confirms this evidence.</p></div></section>}
+
+      {state === "results" && evidenceComplete && <section className="eligibility-confirmed-panel" role="status"><ShieldCheck size={27} weight="fill" /><div><span>FINAL 3R REVIEW</span><h3>Evidence is sufficient and the 3R condition is confirmed</h3><p>Warranty verifies five repairs for the same quality issue—more than four. The CCO 3R Case can now be created.</p></div></section>}
 
       {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
@@ -821,7 +857,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
         })}
       </div>}
 
-      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the plan if needed, then run the review." : "The recommendation is ready for human review."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Check Access &amp; Run</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button><button className="primary-button wide button-with-icon" onClick={onNext}>Review Recommendation<ArrowRight size={18} /></button></div>}</div>}
+      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the plan if needed, then run the review." : evidenceComplete ? "Final 3R eligibility is confirmed. Create the CCO Case next." : "Evidence is insufficient. Return the case to the dealer for the missing fact."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Check Access &amp; Run</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button>{evidenceComplete ? <button className="primary-button wide button-with-icon" onClick={onNext}>Confirm 3R &amp; Create CCO Case<ArrowRight size={18} /></button> : <button className="primary-button wide button-with-icon" onClick={onRequestDealerSupplement}><Buildings size={18} />Request Dealer Supplement</button>}</div>}</div>}
     </section>
   );
 }
@@ -877,11 +913,11 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
 
           <section className="allocation-builder" aria-labelledby="allocation-title">
             <div className="solution-section-heading"><div><span>COST ALLOCATION</span><h4 id="allocation-title">Edit each party&apos;s contribution</h4></div><small>Humanity Care total · {formatCny(calculated.humanityCareCost)}</small></div>
-            <div className="allocation-editor" role="table" aria-label="Editable Buyback cost allocation by party">
-              <div className="allocation-edit-row allocation-edit-head" role="row"><span role="columnheader">Party</span><span role="columnheader">Vehicle</span><span role="columnheader">Humanity Care</span><span role="columnheader">Other</span><span role="columnheader">Calculated Total</span></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">Customer Cover</strong><CurrencyInput compact id="customer-cover-vehicle" label="Customer Cover - Vehicle" value={calculated.customerCoverVehicle} onChange={(value) => updateAmount("customerCoverVehicle", value)} /><CurrencyInput compact id="customer-cover-humanity" label="Customer Cover - Humanity Care" value={calculated.customerCoverHumanityCare} onChange={(value) => updateAmount("customerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.customerCover)}</b></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">Dealer Cover</strong><CurrencyInput compact id="dealer-cover-vehicle" label="Dealer Cover - Vehicle" value={calculated.dealerCoverVehicle} onChange={(value) => updateAmount("dealerCoverVehicle", value)} /><CurrencyInput compact id="dealer-cover-humanity" label="Dealer Cover - Humanity Care" value={calculated.dealerCoverHumanityCare} onChange={(value) => updateAmount("dealerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.dealerCover)}</b></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">BMW Cover</strong><CurrencyInput compact id="bmw-cover-vehicle" label="BMW Cover - Vehicle" value={calculated.bmwCoverVehicle} onChange={(value) => updateAmount("bmwCoverVehicle", value)} /><CurrencyInput compact id="bmw-cover-humanity" label="BMW Cover - Humanity Care" value={calculated.bmwCoverHumanityCare} onChange={(value) => updateAmount("bmwCoverHumanityCare", value)} /><CurrencyInput compact id="bmw-cover-other" label="BMW Cover - Other" value={calculated.bmwCoverOther} onChange={(value) => updateAmount("bmwCoverOther", value)} /><b>{formatCny(calculated.bmwTotalCover)}</b></div>
+            <div className="allocation-editor" aria-label="Editable Buyback cost allocation by party">
+              <div className="allocation-edit-row allocation-edit-head"><span>Party</span><span>Vehicle</span><span>Humanity Care</span><span>Other</span><span>Calculated Total</span></div>
+              <div className="allocation-edit-row"><strong>Customer Cover</strong><CurrencyInput compact id="customer-cover-vehicle" label="Customer Cover - Vehicle" value={calculated.customerCoverVehicle} onChange={(value) => updateAmount("customerCoverVehicle", value)} /><CurrencyInput compact id="customer-cover-humanity" label="Customer Cover - Humanity Care" value={calculated.customerCoverHumanityCare} onChange={(value) => updateAmount("customerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.customerCover)}</b></div>
+              <div className="allocation-edit-row"><strong>Dealer Cover</strong><CurrencyInput compact id="dealer-cover-vehicle" label="Dealer Cover - Vehicle" value={calculated.dealerCoverVehicle} onChange={(value) => updateAmount("dealerCoverVehicle", value)} /><CurrencyInput compact id="dealer-cover-humanity" label="Dealer Cover - Humanity Care" value={calculated.dealerCoverHumanityCare} onChange={(value) => updateAmount("dealerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.dealerCover)}</b></div>
+              <div className="allocation-edit-row"><strong>BMW Cover</strong><CurrencyInput compact id="bmw-cover-vehicle" label="BMW Cover - Vehicle" value={calculated.bmwCoverVehicle} onChange={(value) => updateAmount("bmwCoverVehicle", value)} /><CurrencyInput compact id="bmw-cover-humanity" label="BMW Cover - Humanity Care" value={calculated.bmwCoverHumanityCare} onChange={(value) => updateAmount("bmwCoverHumanityCare", value)} /><CurrencyInput compact id="bmw-cover-other" label="BMW Cover - Other" value={calculated.bmwCoverOther} onChange={(value) => updateAmount("bmwCoverOther", value)} /><b>{formatCny(calculated.bmwTotalCover)}</b></div>
             </div>
             <div className={`allocation-reconciliation ${allocationBalanced ? "balanced" : "mismatch"}`} role="status"><span>{allocationBalanced ? <CheckCircle size={18} weight="fill" /> : <WarningCircle size={18} weight="fill" />}{allocationBalanced ? "Vehicle allocation is balanced" : "Vehicle allocation needs adjustment"}</span><strong>{formatCny(allocatedVehicleCost)} allocated / {formatCny(calculated.vehicleCost)} cost loss</strong></div>
           </section>
