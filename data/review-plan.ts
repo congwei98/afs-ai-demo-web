@@ -8,13 +8,25 @@ export type AgentSources =
       type: "knowledge";
       title: string;
       matches: Array<{ id: string; title: string; sourceType: string; relevance: number; matchedOn: string[]; caveat?: string; contribution: string; excerpt?: string }>;
+    }
+  | {
+      type: "ocr";
+      title: string;
+      documents: Array<{
+        id: string;
+        name: string;
+        pages: number;
+        confidence: number;
+        fields: Array<{ label: string; value: string; confidence: number }>;
+        rawText?: string;
+      }>;
     };
 
 export type ReviewAgent = {
   id: string;
   name: string;
-  role: "Data Agent" | "Knowledge Agent";
-  category: "warranty" | "technical" | "knowledge" | "parts";
+  role: "Data Agent" | "Knowledge Agent" | "Document Agent";
+  category: "warranty" | "technical" | "knowledge" | "parts" | "ocr";
   purpose: string;
   requirement: string;
   resultSummary: string;
@@ -104,6 +116,48 @@ export const optionalReviewAgents: ReviewAgent[] = [
       records: [
         { id: "PO-88341", date: "Ordered 03 Jan", facts: ["Power control module", "Arrived 08 Feb", "36-day delivery"], relevance: "Confirms the critical part exceeded the 30-day arrival threshold.", rawPreview: "Parts order and receipt timestamps show a 36-day delivery interval." },
         { id: "PO-92407", date: "Ordered 12 Feb", facts: ["Control module harness", "Arrived 24 Feb", "12-day delivery"], relevance: "Provides the comparison record for a normal delivery interval.", rawPreview: "Parts order and receipt timestamps show a 12-day delivery interval." },
+      ],
+    },
+    addedBy: "Human",
+  },
+  {
+    id: "ocr-custom",
+    name: "New OCR Agent",
+    role: "Document Agent",
+    category: "ocr",
+    purpose: "Extract structured fields from dealer attachments",
+    requirement: "Read the selected dealer attachments. Extract the document date, repair order number, reported symptom and repair action, and flag fields that need human verification.",
+    resultSummary: "Two dealer documents were read and the requested fields were extracted. One lower-confidence field is flagged for review.",
+    decisionImpact: "Turns dealer attachments into structured facts that other review steps can use without treating OCR output as a final decision.",
+    sources: {
+      type: "ocr",
+      title: "Extracted dealer documents",
+      documents: [
+        {
+          id: "DOC-01",
+          name: "Repair orders.pdf",
+          pages: 3,
+          confidence: 96,
+          fields: [
+            { label: "Repair order", value: "RO-492674", confidence: 99 },
+            { label: "Document date", value: "11 Feb 2026", confidence: 98 },
+            { label: "Reported symptom", value: "Recurring loss of driving power", confidence: 95 },
+            { label: "Repair action", value: "Control unit inspection and software update", confidence: 91 },
+          ],
+          rawText: "Customer reports repeated loss of driving power. Vehicle inspected; control unit and software checked. Customer states the concern remains unresolved.",
+        },
+        {
+          id: "DOC-02",
+          name: "Customer contact record.pdf",
+          pages: 1,
+          confidence: 89,
+          fields: [
+            { label: "Contact date", value: "20 May 2026", confidence: 97 },
+            { label: "Customer request", value: "Vehicle return", confidence: 94 },
+            { label: "Dealer response", value: "BMW review required", confidence: 76 },
+          ],
+          rawText: "Customer requests a vehicle return. Dealer explained that the case must be reviewed by BMW before eligibility can be confirmed.",
+        },
       ],
     },
     addedBy: "Human",

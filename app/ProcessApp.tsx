@@ -640,6 +640,7 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
   if (category === "warranty") return <ShieldCheck size={size} />;
   if (category === "technical") return <Wrench size={size} />;
   if (category === "knowledge") return <Books size={size} />;
+  if (category === "ocr") return <Scan size={size} />;
   return <Database size={size} />;
 }
 
@@ -678,7 +679,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
 
   const addAgent = (agent: ReviewAgent) => {
     const sequence = agents.filter((item) => item.id.startsWith(`${agent.id}-`)).length + 1;
-    const newAgent = { ...agent, id: `${agent.id}-${sequence}`, name: `New Data Agent ${sequence}` };
+    const newAgent = { ...agent, id: `${agent.id}-${sequence}`, name: agent.category === "ocr" ? `New OCR Agent ${sequence}` : `New Data Agent ${sequence}` };
     setAgents((current) => [...current, newAgent]);
     setExpandedAgents((current) => new Set(current).add(newAgent.id));
     setAddOpen(false);
@@ -753,7 +754,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
 
       {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
-      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>Data Agent<small>Define an additional data query</small></strong><Plus size={18} /></button>)}</section>}
+      {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "ocr" ? "OCR Agent" : "Data Agent"}<small>{agent.category === "ocr" ? "Extract structured fields from documents" : "Define an additional data query"}</small></strong><Plus size={18} /></button>)}</section>}
 
       {state === "plan" && <div className="review-agent-list">
         {agents.map((agent, index) => {
@@ -913,9 +914,35 @@ function KnowledgeAgentSourcesView({ sources }: { sources: Extract<AgentSources,
   );
 }
 
+function OCRAgentSourcesView({ sources }: { sources: Extract<AgentSources, { type: "ocr" }> }) {
+  const [expandedDocument, setExpandedDocument] = useState<string | null>(null);
+  return (
+    <section className="agent-sources-view ocr-agent-sources" aria-labelledby="agent-sources-title">
+      <header><div><span>OCR DOCUMENTS</span><h3 id="agent-sources-title">{sources.title}</h3></div><strong>{sources.documents.length} {sources.documents.length === 1 ? "document" : "documents"}</strong></header>
+      <div className="ocr-document-list">
+        {sources.documents.map((document) => {
+          const expanded = expandedDocument === document.id;
+          return <article key={document.id}>
+            <header>
+              <div className="ocr-document-title"><span><FileText size={22} aria-hidden="true" /></span><div><strong>{document.name}</strong><small>{document.id} · {document.pages} {document.pages === 1 ? "page" : "pages"}</small></div></div>
+              <b>{document.confidence}% document confidence</b>
+            </header>
+            <div className="ocr-field-table">
+              <div className="ocr-field-head" aria-hidden="true"><span>Field</span><span>Extracted value</span><span>Confidence</span></div>
+              {document.fields.map((field) => <div className={field.confidence < 85 ? "needs-review" : ""} key={field.label}><strong>{field.label}</strong><span>{field.value}</span><b>{field.confidence}%{field.confidence < 85 && <small>Check</small>}</b></div>)}
+            </div>
+            {document.rawText && <><button className="source-excerpt-toggle" onClick={() => setExpandedDocument(expanded ? null : document.id)} aria-expanded={expanded}>{expanded ? "Hide extracted text" : "View extracted text"}</button>{expanded && <blockquote>{document.rawText}</blockquote>}</>}
+          </article>;
+        })}
+      </div>
+    </section>
+  );
+}
+
 function AgentResultDrawer({ agent, returnLabel, onClose }: { agent: ReviewAgent; returnLabel: string; onClose: () => void }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const sourceCount = agent.sources.type === "data" ? agent.sources.records.length : agent.sources.matches.length;
+  const sourceCount = agent.sources.type === "data" ? agent.sources.records.length : agent.sources.type === "knowledge" ? agent.sources.matches.length : agent.sources.documents.length;
+  const sourceLabel = agent.sources.type === "data" ? sourceCount === 1 ? "record" : "records" : agent.sources.type === "knowledge" ? sourceCount === 1 ? "knowledge match" : "knowledge matches" : sourceCount === 1 ? "document" : "documents";
   return (
     <div className="overlay drawer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="drawer agent-result-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
@@ -926,10 +953,10 @@ function AgentResultDrawer({ agent, returnLabel, onClose }: { agent: ReviewAgent
           <div><strong>Decision impact</strong><p>{agent.decisionImpact}</p></div>
         </section>
         <button className="view-sources-toggle" onClick={() => setSourcesOpen((open) => !open)} aria-expanded={sourcesOpen}>
-          <span><strong>View sources</strong><small>{sourceCount} supporting {agent.sources.type === "data" ? sourceCount === 1 ? "record" : "records" : sourceCount === 1 ? "knowledge match" : "knowledge matches"}</small></span>
+          <span><strong>View sources</strong><small>{sourceCount} supporting {sourceLabel}</small></span>
           <CaretDown size={21} className={sourcesOpen ? "expanded" : ""} aria-hidden="true" />
         </button>
-        {sourcesOpen && (agent.sources.type === "data" ? <DataAgentSourcesView sources={agent.sources} /> : <KnowledgeAgentSourcesView sources={agent.sources} />)}
+        {sourcesOpen && (agent.sources.type === "data" ? <DataAgentSourcesView sources={agent.sources} /> : agent.sources.type === "knowledge" ? <KnowledgeAgentSourcesView sources={agent.sources} /> : <OCRAgentSourcesView sources={agent.sources} />)}
         <div className="drawer-footer"><button className="primary-button wide button-with-icon" onClick={onClose}><ArrowLeft size={18} />{returnLabel}</button></div>
       </section>
     </div>
