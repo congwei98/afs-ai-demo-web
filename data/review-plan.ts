@@ -67,15 +67,15 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     name: "Technical Service Agent",
     role: "Data Agent",
     category: "technical",
-    purpose: "Check the TSARA result and fault source",
-    requirement: "Get the latest TSARA result. Check whether the fault comes from the product, is still open, and was not caused by dealer repair work.",
-    resultSummary: "TSARA classifies the recurring loss of driving power as a serious safety-performance fault that remains unresolved after two repair attempts. No dealer-caused damage was found.",
-    decisionImpact: "Supports a separate Buyback-condition pathway; the final eligibility and remedy remain a human decision.",
+    purpose: "Determine known quality issue and dealer repair negligence",
+    requirement: "Get the latest Technical Service and TSARA findings. Determine whether the symptom matches a known quality issue and whether the dealer failed to follow the required diagnosis or repair procedure.",
+    resultSummary: "The symptom matches a known product quality issue. The dealer followed the prescribed diagnosis and repair procedure; no dealer repair negligence was identified.",
+    decisionImpact: "Supports Buyback on the product-quality pathway. Dealer contribution in the proposal is a commercial allocation, not a finding of repair negligence.",
     sources: {
       type: "data",
       title: "Technical records",
       records: [
-        { id: "TS-DEMO-204", date: "08 May 2026", facts: ["Serious safety-performance fault reproduced", "Product-related root cause", "No dealer-induced damage", "No stable repair measure available"], relevance: "Supports a separate Buyback condition based on the unresolved safety fault.", rawPreview: "TSARA road-test and root-cause statements used by the Technical Service Agent." },
+        { id: "TS-DEMO-204", date: "08 May 2026", facts: ["Known product quality issue matched", "Required diagnostic steps completed", "Repair procedure followed", "No dealer repair negligence identified"], relevance: "Establishes the product-quality pathway and separates product responsibility from dealer repair conduct.", rawPreview: "Technical Service review compares the observed symptom with known quality patterns and checks the dealer's diagnosis and repair steps." },
       ],
     },
   },
@@ -85,7 +85,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     role: "Knowledge Agent",
     category: "knowledge",
     purpose: "Compare policy reasoning and internal allocations",
-    requirement: "Find approved cases with a comparable serious safety-performance fault and Buyback request. Compare rule reasoning, evidence gaps and itemized cost allocations without copying a historical outcome.",
+    requirement: "Find approved cases with a comparable known quality issue and Buyback request. Compare rule reasoning, dealer-conduct findings and itemized cost allocations without copying a historical outcome.",
     resultSummary: "The closest cases use the same valuation and cost-allocation structure, with case-specific amounts.",
     decisionImpact: "Supports an itemized proposal while keeping every amount subject to human review.",
     sources: {
@@ -168,7 +168,7 @@ export const settlementRecommendation = {
   type: "AI assessment · human decision required",
   title: "Buyback recommended",
   applicability: "Likely eligible",
-  summary: "The vehicle is in scope and TSARA classifies the unresolved loss of driving power as a serious safety-performance fault after repeated repair attempts. The proposal separates customer entitlement, vehicle valuation and internal cost allocation.",
+  summary: "The vehicle is in scope and Technical Service confirms that the symptom matches a known product quality issue. The dealer followed the required repair procedure and no repair negligence was identified. Buyback is recommended on the product-quality pathway; the proposed dealer contribution is a commercial allocation rather than a fault finding.",
   solution: {
     finalSolution: "Buyback",
     tradeIn: "Yes",
@@ -194,7 +194,7 @@ export const settlementRecommendation = {
   },
   conclusions: [
     { id: "coverage", label: "Scope & repair count", value: "In scope · 3 visits not standalone threshold", agentId: "warranty", rationale: "Coverage is active, while the more-than-four-repairs condition is not met by three visits alone." },
-    { id: "origin", label: "Fault source", value: "Product issue", agentId: "technical", rationale: "TSARA found a product issue and no dealer-caused damage." },
+    { id: "origin", label: "Technical Service assessment", value: "Known quality issue · no dealer negligence", agentId: "technical", rationale: "Technical Service matched the symptom to a known quality issue and confirmed that the dealer followed the prescribed repair procedure." },
     { id: "allocation", label: "Internal allocation", value: "Itemized amount proposal", agentId: "knowledge", rationale: "Comparable approved cases inform the cost structure; each amount remains case-specific and requires human approval." },
   ],
 };

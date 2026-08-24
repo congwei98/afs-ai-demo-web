@@ -64,6 +64,19 @@ type DealerSubmission = {
   submittedAt: string;
   attachments: DealerAttachment[];
 };
+type BuybackSolution = typeof settlementRecommendation.solution;
+type EditableAmountKey =
+  | "actualVehiclePrice"
+  | "purchaseTax"
+  | "otherCost"
+  | "usedCarPrice"
+  | "customerCoverVehicle"
+  | "customerCoverHumanityCare"
+  | "dealerCoverVehicle"
+  | "dealerCoverHumanityCare"
+  | "bmwCoverVehicle"
+  | "bmwCoverHumanityCare"
+  | "bmwCoverOther";
 
 const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
@@ -82,13 +95,27 @@ const ccoCreationActions = [
   { title: "Set the asynchronous wait state", detail: "The Process Agent records WAITING_DEALER_EVIDENCE and closes this Route task." },
 ];
 
-function createDecisionInstruction() {
-  const solution = settlementRecommendation.solution;
-  return `Approve the proposed ${solution.finalSolution} solution. Record the vehicle valuation, customer cover of CNY ${solution.customerCover.toLocaleString("en-US")}, dealer cover of CNY ${solution.dealerCover.toLocaleString("en-US")} and BMW total cover of CNY ${solution.bmwTotalCover.toLocaleString("en-US")} separately. Save the decision, evidence and action receipts in CCO.`;
+function calculateBuybackSolution(solution: BuybackSolution): BuybackSolution {
+  const totalVehiclePurchaseCost = solution.actualVehiclePrice + solution.purchaseTax + solution.otherCost;
+  const vehicleCost = Math.max(totalVehiclePurchaseCost - solution.usedCarPrice, 0);
+  const humanityCareCost = solution.customerCoverHumanityCare + solution.dealerCoverHumanityCare + solution.bmwCoverHumanityCare;
+  const customerCover = solution.customerCoverVehicle + solution.customerCoverHumanityCare;
+  const dealerCover = solution.dealerCoverVehicle + solution.dealerCoverHumanityCare;
+  const bmwTotalCover = solution.bmwCoverVehicle + solution.bmwCoverHumanityCare + solution.bmwCoverOther;
+  return { ...solution, totalVehiclePurchaseCost, vehicleCost, humanityCareCost, customerCover, dealerCover, bmwTotalCover };
+}
+
+function createDecisionInstruction(solution: BuybackSolution = settlementRecommendation.solution) {
+  const calculated = calculateBuybackSolution(solution);
+  return `Approve the proposed ${calculated.finalSolution} solution. Record the edited vehicle valuation, customer cover of CNY ${calculated.customerCover.toLocaleString("en-US")}, dealer cover of CNY ${calculated.dealerCover.toLocaleString("en-US")} and BMW total cover of CNY ${calculated.bmwTotalCover.toLocaleString("en-US")} separately. Save the decision, evidence and action receipts in CCO.`;
 }
 
 function formatCny(value: number) {
   return `CNY ${value.toLocaleString("en-US")}`;
+}
+
+function CurrencyInput({ id, label, value, onChange, compact = false }: { id: string; label: string; value: number; onChange: (value: string) => void; compact?: boolean }) {
+  return <label className={`currency-input ${compact ? "compact" : ""}`} htmlFor={id}><span>{label}</span><div><b>CNY</b><input id={id} type="number" min="0" step="1000" inputMode="numeric" value={value} onChange={(event) => onChange(event.target.value)} /></div></label>;
 }
 
 function RoleBadge({ children }: { children: React.ReactNode }) {
@@ -132,6 +159,7 @@ export default function ProcessApp() {
   const [dealerMockOpen, setDealerMockOpen] = useState(false);
   const [dealerSubmission, setDealerSubmission] = useState<DealerSubmission | null>(null);
   const [routedDomain, setRoutedDomain] = useState<string | null>(null);
+  const [buybackDraft, setBuybackDraft] = useState<BuybackSolution>(() => calculateBuybackSolution({ ...settlementRecommendation.solution }));
   const [decisionInstruction, setDecisionInstruction] = useState(createDecisionInstruction);
   const [plannedAgents, setPlannedAgents] = useState<ReviewAgent[]>(() => recommendedReviewAgents.map((agent) => ({ ...agent })));
 
@@ -141,7 +169,9 @@ export default function ProcessApp() {
     setReviewState("plan");
     setAccessGranted(false);
     setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
-    setDecisionInstruction(createDecisionInstruction());
+    const initialBuybackDraft = calculateBuybackSolution({ ...settlementRecommendation.solution });
+    setBuybackDraft(initialBuybackDraft);
+    setDecisionInstruction(createDecisionInstruction(initialBuybackDraft));
   };
 
   const backToWorkbench = () => {
@@ -209,7 +239,7 @@ export default function ProcessApp() {
               onNext={() => setStage(5)}
             />
           )}
-          {stage === 5 && <RecommendationScreen agents={plannedAgents} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
+          {stage === 5 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
           {stage === 6 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
@@ -794,23 +824,18 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
   );
 }
 
-function RecommendationScreen({ agents, instruction, setInstruction, onResult, onBack, onConfirm }: { agents: ReviewAgent[]; instruction: string; setInstruction: (value: string) => void; onResult: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
+function RecommendationScreen({ agents, solution, setSolution, instruction, setInstruction, onResult, onBack, onConfirm }: { agents: ReviewAgent[]; solution: BuybackSolution; setSolution: (value: BuybackSolution) => void; instruction: string; setInstruction: (value: string) => void; onResult: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
   const [reviewed, setReviewed] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
-  const solution = settlementRecommendation.solution;
-  const valuationItems = [
-    ["Actual Vehicle Price", solution.actualVehiclePrice],
-    ["Purchase Tax", solution.purchaseTax],
-    ["Other Cost", solution.otherCost],
-    ["Total Vehicle Purchase Cost", solution.totalVehiclePurchaseCost],
-    ["Used Car Price", solution.usedCarPrice],
-    ["Vehicle Cost", solution.vehicleCost],
-  ] as const;
-  const allocationRows = [
-    { party: "Customer Cover", vehicle: solution.customerCoverVehicle, humanity: solution.customerCoverHumanityCare, other: 0, total: solution.customerCover },
-    { party: "Dealer Cover", vehicle: solution.dealerCoverVehicle, humanity: solution.dealerCoverHumanityCare, other: 0, total: solution.dealerCover },
-    { party: "BMW Cover", vehicle: solution.bmwCoverVehicle, humanity: solution.bmwCoverHumanityCare, other: solution.bmwCoverOther, total: solution.bmwTotalCover },
-  ];
+  const calculated = calculateBuybackSolution(solution);
+  const allocatedVehicleCost = calculated.customerCoverVehicle + calculated.dealerCoverVehicle + calculated.bmwCoverVehicle;
+  const allocationBalanced = allocatedVehicleCost === calculated.vehicleCost;
+  const updateAmount = (key: EditableAmountKey, rawValue: string) => {
+    const previousDraftInstruction = createDecisionInstruction(calculated);
+    const next = calculateBuybackSolution({ ...calculated, [key]: Math.max(0, Number(rawValue) || 0) });
+    setSolution(next);
+    if (instruction === previousDraftInstruction) setInstruction(createDecisionInstruction(next));
+  };
   return (
     <section className="screen-panel recommendation-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE</p><h2>Recommendation &amp; Decision</h2></div></div>
@@ -823,21 +848,35 @@ function RecommendationScreen({ agents, instruction, setInstruction, onResult, o
         </section>
 
         <section className="buyback-solution" aria-labelledby="buyback-solution-title">
-          <header><div><span>PROPOSED FINAL SOLUTION</span><h3 id="buyback-solution-title">{solution.finalSolution}</h3></div><strong>Trade In · {solution.tradeIn}</strong></header>
-          <dl className="solution-facts">
-            <div><dt>Trade In Model</dt><dd>{solution.tradeInModel}</dd></div>
-            <div><dt>Total Vehicle Purchase Cost</dt><dd>{formatCny(solution.totalVehiclePurchaseCost)}</dd></div>
-            <div><dt>Vehicle Cost</dt><dd>{formatCny(solution.vehicleCost)}</dd></div>
-            <div><dt>Humanity Care Cost</dt><dd>{formatCny(solution.humanityCareCost)}</dd></div>
-          </dl>
-          <div className="solution-ledger">
-            <section aria-labelledby="valuation-title"><h4 id="valuation-title">Vehicle valuation</h4><dl>{valuationItems.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatCny(value)}</dd></div>)}</dl></section>
-            <section aria-labelledby="allocation-title"><h4 id="allocation-title">Cost allocation</h4><div className="allocation-table" role="table" aria-label="Buyback cost allocation by party">
-              <div className="allocation-row allocation-head" role="row"><span role="columnheader">Party</span><span role="columnheader">Vehicle</span><span role="columnheader">Humanity Care</span><span role="columnheader">Other</span><span role="columnheader">Total</span></div>
-              {allocationRows.map((row) => <div className="allocation-row" role="row" key={row.party}><strong role="rowheader">{row.party}</strong><span>{formatCny(row.vehicle)}</span><span>{formatCny(row.humanity)}</span><span>{formatCny(row.other)}</span><b>{formatCny(row.total)}</b></div>)}
-            </div></section>
-          </div>
-          <aside className="solution-remark"><span>BMW REMARK</span><p>{solution.bmwRemark}</p></aside>
+          <header><div><span>PROPOSED FINAL SOLUTION</span><h3 id="buyback-solution-title">{calculated.finalSolution}</h3><p>All entered amounts are editable. Calculated totals update automatically.</p></div><strong><PencilSimple size={15} aria-hidden="true" />Editable proposal</strong></header>
+          <dl className="solution-context"><div><dt>Trade In</dt><dd>{calculated.tradeIn}</dd></div><div><dt>Trade In Model</dt><dd>{calculated.tradeInModel}</dd></div></dl>
+
+          <section className="valuation-builder" aria-labelledby="valuation-title">
+            <div className="solution-section-heading"><div><span>VEHICLE VALUATION</span><h4 id="valuation-title">How the vehicle cost loss is calculated</h4></div><small>Vehicle total cost − used car value = vehicle cost loss</small></div>
+            <div className="valuation-equation">
+              <article className="valuation-card total-cost"><header><span>VEHICLE TOTAL COST</span><strong>{formatCny(calculated.totalVehiclePurchaseCost)}</strong></header><div className="valuation-components">
+                <CurrencyInput id="actual-vehicle-price" label="Actual Vehicle Price" value={calculated.actualVehiclePrice} onChange={(value) => updateAmount("actualVehiclePrice", value)} />
+                <CurrencyInput id="purchase-tax" label="Purchase Tax" value={calculated.purchaseTax} onChange={(value) => updateAmount("purchaseTax", value)} />
+                <CurrencyInput id="other-cost" label="Other Cost" value={calculated.otherCost} onChange={(value) => updateAmount("otherCost", value)} />
+              </div></article>
+              <span className="equation-operator" aria-hidden="true">−</span>
+              <article className="valuation-card used-value"><header><span>USED CAR VALUE</span><strong>{formatCny(calculated.usedCarPrice)}</strong></header><CurrencyInput id="used-car-price" label="Used Car Price" value={calculated.usedCarPrice} onChange={(value) => updateAmount("usedCarPrice", value)} /></article>
+              <span className="equation-operator" aria-hidden="true">=</span>
+              <article className="valuation-card loss-result"><header><span>VEHICLE COST LOSS</span><strong>{formatCny(calculated.vehicleCost)}</strong></header><p>Automatically calculated from the editable valuation above.</p></article>
+            </div>
+          </section>
+
+          <section className="allocation-builder" aria-labelledby="allocation-title">
+            <div className="solution-section-heading"><div><span>COST ALLOCATION</span><h4 id="allocation-title">Edit each party&apos;s contribution</h4></div><small>Humanity Care total · {formatCny(calculated.humanityCareCost)}</small></div>
+            <div className="allocation-editor" role="table" aria-label="Editable Buyback cost allocation by party">
+              <div className="allocation-edit-row allocation-edit-head" role="row"><span role="columnheader">Party</span><span role="columnheader">Vehicle</span><span role="columnheader">Humanity Care</span><span role="columnheader">Other</span><span role="columnheader">Calculated Total</span></div>
+              <div className="allocation-edit-row" role="row"><strong role="rowheader">Customer Cover</strong><CurrencyInput compact id="customer-cover-vehicle" label="Customer Cover - Vehicle" value={calculated.customerCoverVehicle} onChange={(value) => updateAmount("customerCoverVehicle", value)} /><CurrencyInput compact id="customer-cover-humanity" label="Customer Cover - Humanity Care" value={calculated.customerCoverHumanityCare} onChange={(value) => updateAmount("customerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.customerCover)}</b></div>
+              <div className="allocation-edit-row" role="row"><strong role="rowheader">Dealer Cover</strong><CurrencyInput compact id="dealer-cover-vehicle" label="Dealer Cover - Vehicle" value={calculated.dealerCoverVehicle} onChange={(value) => updateAmount("dealerCoverVehicle", value)} /><CurrencyInput compact id="dealer-cover-humanity" label="Dealer Cover - Humanity Care" value={calculated.dealerCoverHumanityCare} onChange={(value) => updateAmount("dealerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.dealerCover)}</b></div>
+              <div className="allocation-edit-row" role="row"><strong role="rowheader">BMW Cover</strong><CurrencyInput compact id="bmw-cover-vehicle" label="BMW Cover - Vehicle" value={calculated.bmwCoverVehicle} onChange={(value) => updateAmount("bmwCoverVehicle", value)} /><CurrencyInput compact id="bmw-cover-humanity" label="BMW Cover - Humanity Care" value={calculated.bmwCoverHumanityCare} onChange={(value) => updateAmount("bmwCoverHumanityCare", value)} /><CurrencyInput compact id="bmw-cover-other" label="BMW Cover - Other" value={calculated.bmwCoverOther} onChange={(value) => updateAmount("bmwCoverOther", value)} /><b>{formatCny(calculated.bmwTotalCover)}</b></div>
+            </div>
+            <div className={`allocation-reconciliation ${allocationBalanced ? "balanced" : "mismatch"}`} role="status"><span>{allocationBalanced ? <CheckCircle size={18} weight="fill" /> : <WarningCircle size={18} weight="fill" />}{allocationBalanced ? "Vehicle allocation is balanced" : "Vehicle allocation needs adjustment"}</span><strong>{formatCny(allocatedVehicleCost)} allocated / {formatCny(calculated.vehicleCost)} cost loss</strong></div>
+          </section>
+          <aside className="solution-remark"><span>BMW REMARK</span><p>{calculated.bmwRemark}</p></aside>
         </section>
 
         <section className="decision-agent-results" aria-label="Agent results supporting the recommendation">

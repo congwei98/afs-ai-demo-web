@@ -29,7 +29,7 @@
   "agents": [
     { "name": "Customer Care", "role": "Planner", "task": "Plan the review, coordinate work and consolidate the applicability and Buyback recommendation", "findings": [] },
     { "name": "Warranty Agent", "role": "Data Agent", "task": "Confirm 3R eligibility", "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"] },
-    { "name": "Technical Service Agent", "role": "Data Agent", "task": "Retrieve the TSARA result and establish fault origin", "findings": ["Serious safety-performance fault confirmed", "Fault persists after repeated repair attempts", "No dealer-induced damage"] },
+    { "name": "Technical Service Agent", "role": "Data Agent", "task": "Check known quality issue and dealer repair negligence", "findings": ["Known product quality issue matched", "Required repair procedure followed", "No dealer repair negligence identified"] },
     { "name": "Case Knowledge Agent", "role": "Knowledge Agent", "task": "Review comparable Buyback cost allocations", "findings": ["3 comparable cases found", "Comparable cost items normalized for review"] }
   ],
   "access": {
@@ -45,7 +45,7 @@
     { "date": "2025-11-06", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty records" },
     { "date": "2026-01-14", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty records" },
     { "date": "2026-03-09", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty records" },
-    { "date": "2026-05-08", "record": "TSARA Result TS-DEMO-204", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical records" }
+    { "date": "2026-05-08", "record": "TSARA Result TS-DEMO-204", "finding": "Known quality issue; no dealer repair negligence", "source": "Technical records" }
   ],
   "previousCases": [
     { "caseId": "3R-DEMO-0071", "issue": "Recurring power loss", "handling": "3R applicable", "outcome": "Buyback approved" },
@@ -54,7 +54,7 @@
   ],
   "recommendation": {
     "title": "Likely Eligible for Buyback · Human Decision Required",
-    "reasons": ["TSARA confirms an unresolved serious safety-performance fault", "Three visits are not used as the standalone threshold", "Internal cost allocation is assessed separately from customer entitlement"]
+    "reasons": ["Technical Service matches the symptom to a known quality issue", "No dealer repair negligence is identified", "Internal cost allocation is assessed separately from technical responsibility"]
   },
   "completionActions": ["3R Case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
 }
