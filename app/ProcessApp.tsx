@@ -56,14 +56,25 @@ import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settl
 
 type ReviewState = "plan" | "running" | "results";
 type ComplaintSource = "call" | "scan";
+type DealerAttachment = {
+  name: string;
+  type: string;
+  detail: string;
+};
 type DealerSubmission = {
   contactSummary: string;
   submittedAt: string;
-  evidenceCount: number;
+  attachments: DealerAttachment[];
 };
 
 const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
 const reviewProcessAgentName = "Three Guarantees Vehicle Return Process Agent";
+const dealerEvidenceAttachments: DealerAttachment[] = [
+  { name: "Repair orders.pdf", type: "PDF", detail: "3 repair orders · service history" },
+  { name: "TSARA diagnosis report.pdf", type: "PDF", detail: "Technical finding · 20 May 2026" },
+  { name: "Parts order timeline.xlsx", type: "XLSX", detail: "Order and arrival dates" },
+  { name: "Customer contact record.pdf", type: "PDF", detail: "Dealer communication record" },
+];
 
 const ccoCreationActions = [
   { title: "Hand over the approved route", detail: `The Router Agent hands the case and call evidence to the ${reviewProcessAgentName}.` },
@@ -190,6 +201,7 @@ export default function ProcessApp() {
                 setReviewState("plan");
                 setAccessGranted(false);
               }}
+              dealerSubmission={dealerSubmission}
               onResult={setResultAgentId}
               onNext={() => setStage(5)}
             />
@@ -388,7 +400,7 @@ function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench 
       {!submission ? <>
         <section className="async-boundary"><div className="async-visual"><div><Robot size={42} weight="duotone" /><span>Process Agent</span></div><i /><div><Buildings size={42} weight="duotone" /><span>Dealer in CCO</span></div></div><div><span>PROCESS PAUSED AT EXTERNAL EVENT</span><h3>The Review Plan cannot start yet</h3><p>The dealer must contact the customer and submit evidence in CCO. The Process Agent resumes only after receiving <code>DealerSubmissionCompleted</code>.</p></div></section>
         <section className="evidence-checklist"><header><ListChecks size={21} /><div><span>DEALER EVIDENCE REQUEST</span><h3>4 required evidence groups</h3></div></header>{["Customer communication summary", "Repair orders and diagnosis records", "TSARA / technical evidence", "Parts orders and arrival timeline"].map((item) => <div key={item}><span /><strong>{item}</strong><small>Waiting</small></div>)}</section>
-      </> : <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>DEALER SUBMISSION COMPLETED</span><h3>External event accepted and matched to {caseData.id}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.evidenceCount} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>}
+      </> : <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>DEALER SUBMISSION COMPLETED</span><h3>External event accepted and matched to {caseData.id}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.attachments.length} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>}
       <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={submission ? onWorkbench : onOpenMock}>{submission ? <ArrowLeft size={18} /> : <Buildings size={18} />}{submission ? "Back to Workbench" : "Open Dealer CCO Mock"}</button><button className="primary-button wide button-with-icon" onClick={onContinue} disabled={!submission}>Generate Review Plan<ArrowRight size={18} /></button></div>
     </section>
   );
@@ -397,7 +409,6 @@ function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench 
 function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
   const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
   const [files, setFiles] = useState([true, true, true, true]);
-  const labels = ["3 repair orders", "TSARA result TS-2026-117", "Parts order timeline", "Customer contact record"];
   const ready = summary.trim().length >= 20 && files.every(Boolean);
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
@@ -406,9 +417,9 @@ function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmi
         <h2 id="dealer-mock-title">Complete Dealer Evidence</h2>
         <p className="modal-intro">This simulates the dealer completing the real CCO task. Closing this window does not advance the process.</p>
         <label><span>Customer communication summary</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
-        <fieldset><legend>Evidence manifest</legend>{labels.map((label, index) => <label key={label}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{label}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
+        <fieldset><legend>Evidence manifest</legend>{dealerEvidenceAttachments.map((attachment, index) => <label key={attachment.name}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{attachment.name}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
         <div className="event-preview"><code>DealerSubmissionCompleted</code><span>Emitted only after this form is submitted</span></div>
-        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: "23 Aug 2026 · 14:42", evidenceCount: files.filter(Boolean).length })}><CheckCircle size={18} />Submit evidence to CCO</button></div>
+        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: "23 Aug 2026 · 14:42", attachments: dealerEvidenceAttachments.filter((_, index) => files[index]) })}><CheckCircle size={18} />Submit evidence to CCO</button></div>
       </section>
     </div>
   );
@@ -632,7 +643,7 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
   return <Database size={size} />;
 }
 
-function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onReplan, onResult, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void }) {
+function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, onRunComplete, onReplan, onResult, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; dealerSubmission: DealerSubmission | null; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void }) {
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["warranty"]));
   const [contextOpen, setContextOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -698,7 +709,17 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
       {state === "plan" && <section className="plan-rationale">
         <div className="rationale-icon"><MagicWand size={22} /></div>
         <div><span>WHY THIS PLAN</span><h3>{reviewPlanContext.recommendation}</h3><button onClick={() => setContextOpen(!contextOpen)} aria-expanded={contextOpen}><Eye size={16} />{contextOpen ? "Hide context" : "View complaint context"}</button></div>
-        {contextOpen && <div className="plan-context-evidence">{reviewPlanContext.evidence.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>From complaint intake</small></div>)}</div>}
+        {contextOpen && <section className="plan-context-document" aria-label="Complaint and dealer context">
+          <header><div><span>CASE CONTEXT</span><h4>Complaint and dealer submission</h4></div>{dealerSubmission && <small>Dealer submitted · {dealerSubmission.submittedAt}</small>}</header>
+          <div className="context-narrative">
+            <article><div className="context-source-icon"><Headset size={19} aria-hidden="true" /></div><div><span>Customer Care summary</span><p>{reviewPlanContext.complaintSummary}</p></div></article>
+            <article><div className="context-source-icon dealer"><Buildings size={19} aria-hidden="true" /></div><div><span>Dealer follow-up</span><p>{dealerSubmission?.contactSummary ?? "Dealer follow-up has not been received."}</p></div></article>
+          </div>
+          <div className="context-attachments">
+            <header><div><Paperclip size={18} aria-hidden="true" /><strong>Dealer attachments</strong></div><span>{dealerSubmission?.attachments.length ?? 0} files</span></header>
+            {dealerSubmission?.attachments.map((attachment) => <article key={attachment.name}><FileText size={22} aria-hidden="true" /><div><strong>{attachment.name}</strong><span>{attachment.detail}</span></div><b>{attachment.type}</b></article>)}
+          </div>
+        </section>}
       </section>}
 
       {(state === "running" || state === "results") && (
@@ -742,7 +763,7 @@ function ReviewScreen({ state, agents, setAgents, onAccess, onRunComplete, onRep
               <div className="agent-card-top"><button className="agent-card-header" onClick={() => toggleExpanded(agent.id)} aria-expanded={expanded}>
                 <span className="step-number">{index + 1}</span>
                 <span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span>
-                <span className="agent-card-title"><strong>{agent.name} <small>{agent.system}</small></strong><span>{agent.purpose}</span></span>
+                <span className="agent-card-title"><strong>{agent.name}</strong><span>{agent.purpose}</span></span>
                 {agent.addedBy && <span className="human-added">Added by human</span>}
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
@@ -840,7 +861,7 @@ function ExecutionScreen({ instruction, completed, onComplete, onWorkbench }: { 
 function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onCancel: () => void; onAllow: () => void }) {
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Check Agent Access</h2><p className="modal-intro">A7 will send these case tasks.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name} {agent.system !== "Enterprise Knowledge" ? `(${agent.system})` : ""}</strong><RoleBadge>{agent.role}</RoleBadge><span>{agent.purpose}</span></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><Clock size={18} aria-hidden="true" />{caseData.access.duration}</span></div><p>Access ends when this review is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Check Agent Access</h2><p className="modal-intro">The Process Agent will run the selected Agents for this case.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name}</strong><RoleBadge>{agent.role}</RoleBadge></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><Clock size={18} aria-hidden="true" />{caseData.access.duration}</span></div><p>Access ends when this review is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
     </div>
   );
 }

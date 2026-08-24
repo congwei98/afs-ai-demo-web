@@ -18,28 +18,24 @@
   "agents": [
     {
       "name": "Customer Care",
-      "system": "BBS-A-7",
       "role": "Planner",
       "task": "Plan the review, coordinate work and consolidate the applicability and compensation recommendation",
       "findings": []
     },
     {
       "name": "Warranty Agent",
-      "system": "BBS-A-4",
       "role": "Data Agent",
       "task": "Confirm Three Guarantees eligibility",
       "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"]
     },
     {
       "name": "Technical Service Agent",
-      "system": "C5-CN-A-6",
       "role": "Data Agent",
       "task": "Retrieve the TSARA Result and establish fault origin",
       "findings": ["Serious safety-performance fault confirmed", "Fault persists after repeated repair attempts", "No dealer-induced damage"]
     },
     {
       "name": "Case Knowledge Agent",
-      "system": "Enterprise Knowledge",
       "role": "Knowledge Agent",
       "task": "Review comparable compensation allocations",
       "findings": ["3 comparable cases found", "Comparable cases support BMW 20% / Dealer 80%"]
@@ -50,15 +46,15 @@
     "mode": "Read only",
     "duration": "30 minutes",
     "sources": [
-      { "name": "Warranty (BBS-A-4)", "detail": "Warranty and repair records" },
-      { "name": "Technical Service (C5-CN-A-6)", "detail": "Diagnostic and technical records" }
+      { "name": "Warranty records", "detail": "Warranty and repair records" },
+      { "name": "Technical records", "detail": "Diagnostic and technical records" }
     ]
   },
   "records": [
-    { "date": "2025-10-18", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty (BBS-A-4)" },
-    { "date": "2025-12-02", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty (BBS-A-4)" },
-    { "date": "2026-02-11", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty (BBS-A-4)" },
-    { "date": "2026-05-20", "record": "TSARA Result TS-2026-117", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical Service (C5-CN-A-6)" }
+    { "date": "2025-10-18", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty records" },
+    { "date": "2025-12-02", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty records" },
+    { "date": "2026-02-11", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty records" },
+    { "date": "2026-05-20", "record": "TSARA Result TS-2026-117", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical records" }
   ],
   "previousCases": [
     { "caseId": "CC-2025-1123", "issue": "Recurring power loss", "handling": "Three Guarantees applicable", "outcome": "BMW 20% / Dealer 80%" },

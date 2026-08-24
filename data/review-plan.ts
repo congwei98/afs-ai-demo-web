@@ -13,7 +13,6 @@ export type AgentSources =
 export type ReviewAgent = {
   id: string;
   name: string;
-  system: string;
   role: "Data Agent" | "Knowledge Agent";
   category: "warranty" | "technical" | "knowledge" | "parts";
   purpose: string;
@@ -25,21 +24,16 @@ export type ReviewAgent = {
 };
 
 export const reviewPlanContext = {
-  objective: "Check policy applicability and return conditions before considering the customer remedy and internal allocation.",
   recommendation:
     "Verify scope, test every relevant return condition, trace the fault and parts timeline, then compare approved cases.",
-  evidence: [
-    { label: "Complaint", value: "Recurring loss of power" },
-    { label: "Repair history", value: "Customer stated 3 visits" },
-    { label: "Customer request", value: "Vehicle return" },
-  ],
+  complaintSummary:
+    "The customer reports recurring loss of driving power after three dealer visits and requests a vehicle return under the Three Guarantees policy. Customer Care classified the call as a return-candidate complaint; eligibility has not yet been decided.",
 };
 
 export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "warranty",
     name: "Warranty Agent",
-    system: "BBS-A-4",
     role: "Data Agent",
     category: "warranty",
     purpose: "Verify coverage and repair history",
@@ -59,7 +53,6 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "technical",
     name: "Technical Service Agent",
-    system: "C5-CN-A-6",
     role: "Data Agent",
     category: "technical",
     purpose: "Check the TSARA result and fault source",
@@ -77,7 +70,6 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "knowledge",
     name: "Case Knowledge Agent",
-    system: "Enterprise Knowledge",
     role: "Knowledge Agent",
     category: "knowledge",
     purpose: "Compare policy reasoning and internal allocations",
@@ -100,11 +92,10 @@ export const optionalReviewAgents: ReviewAgent[] = [
   {
     id: "data-custom",
     name: "New Data Agent",
-    system: "BBS-A-3 Parts",
     role: "Data Agent",
     category: "parts",
     purpose: "Check whether key parts took over 30 days to arrive",
-    requirement: "Check BBS-A-3 for parts linked to these repairs. Compare order and arrival dates. Flag any key part that took more than 30 days.",
+    requirement: "Check the parts records linked to these repairs. Compare order and arrival dates. Flag any key part that took more than 30 days.",
     resultSummary: "The power-control module took 36 days to arrive, 6 days over the limit.",
     decisionImpact: "Adds context about parts supply for the final decision.",
     sources: {
