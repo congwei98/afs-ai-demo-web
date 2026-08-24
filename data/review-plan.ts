@@ -37,9 +37,9 @@ export type ReviewAgent = {
 
 export const reviewPlanContext = {
   recommendation:
-    "Verify scope, test every relevant return condition, trace the fault and parts timeline, then compare approved cases.",
+    "Verify scope, test every relevant Buyback condition, trace the fault and parts timeline, then compare approved cases.",
   complaintSummary:
-    "The customer reports recurring loss of driving power after three dealer visits and requests a vehicle return under the Three Guarantees policy. Customer Care classified the call as a return-candidate complaint; eligibility has not yet been decided.",
+    "The customer reports recurring loss of driving power after three dealer visits and requests a Buyback review under the 3R policy. Customer Care classified the call as a Buyback-candidate complaint; eligibility has not yet been decided.",
 };
 
 export const recommendedReviewAgents: ReviewAgent[] = [
@@ -49,7 +49,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     role: "Data Agent",
     category: "warranty",
     purpose: "Verify coverage and repair history",
-    requirement: "Get the repair and warranty records for this VIN. Verify the Three Guarantees period and map the repair facts to each relevant rule without treating three visits as a standalone return condition.",
+    requirement: "Get the repair and warranty records for this VIN. Verify the 3R period and map the repair facts to each relevant rule without treating three visits as a standalone Buyback condition.",
     resultSummary: "Coverage is active. Three visits are verified, but that count alone does not meet the more-than-four-repairs condition.",
     decisionImpact: "Confirms scope and prevents an incorrect repair-count conclusion; other independent conditions still require review.",
     sources: {
@@ -70,12 +70,12 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     purpose: "Check the TSARA result and fault source",
     requirement: "Get the latest TSARA result. Check whether the fault comes from the product, is still open, and was not caused by dealer repair work.",
     resultSummary: "TSARA classifies the recurring loss of driving power as a serious safety-performance fault that remains unresolved after two repair attempts. No dealer-caused damage was found.",
-    decisionImpact: "Supports a separate return-condition pathway; the final eligibility and remedy remain a human decision.",
+    decisionImpact: "Supports a separate Buyback-condition pathway; the final eligibility and remedy remain a human decision.",
     sources: {
       type: "data",
       title: "Technical records",
       records: [
-        { id: "TS-2026-117", date: "20 May 2026", facts: ["Serious safety-performance fault reproduced", "Product-related root cause", "No dealer-induced damage", "No stable repair measure available"], relevance: "Supports a separate vehicle-return condition based on the unresolved safety fault.", rawPreview: "TSARA road-test and root-cause statements used by the Technical Service Agent." },
+        { id: "TS-DEMO-204", date: "08 May 2026", facts: ["Serious safety-performance fault reproduced", "Product-related root cause", "No dealer-induced damage", "No stable repair measure available"], relevance: "Supports a separate Buyback condition based on the unresolved safety fault.", rawPreview: "TSARA road-test and root-cause statements used by the Technical Service Agent." },
       ],
     },
   },
@@ -85,16 +85,16 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     role: "Knowledge Agent",
     category: "knowledge",
     purpose: "Compare policy reasoning and internal allocations",
-    requirement: "Find approved cases with a comparable serious safety-performance fault and return request. Compare rule reasoning, evidence gaps and internal allocations without copying a historical outcome.",
-    resultSummary: "The closest cases use BMW 20% and dealer 80%.",
-    decisionImpact: "Supports BMW 20% and dealer 80% for this case.",
+    requirement: "Find approved cases with a comparable serious safety-performance fault and Buyback request. Compare rule reasoning, evidence gaps and itemized cost allocations without copying a historical outcome.",
+    resultSummary: "The closest cases use the same valuation and cost-allocation structure, with case-specific amounts.",
+    decisionImpact: "Supports an itemized proposal while keeping every amount subject to human review.",
     sources: {
       type: "knowledge",
       title: "Comparable knowledge matches",
       matches: [
-        { id: "CC-2025-1123", title: "Approved serious power-loss return case", sourceType: "Approved case", relevance: 94, matchedOn: ["Same safety-performance fault", "Same vehicle-return request", "Same policy pathway"], caveat: "Different vehicle model and repair dates.", contribution: "Supports BMW 20% / Dealer 80% as an internal allocation reference.", excerpt: "Approved return after the safety-performance fault remained unresolved following two repair attempts." },
-        { id: "CC-2025-0876", title: "High-voltage shutdown return case", sourceType: "Approved case", relevance: 88, matchedOn: ["Comparable safety issue", "Same requested remedy", "Similar unsuccessful repair history"], caveat: "One additional repair attempt.", contribution: "Confirms the same internal allocation was used in a close case.", excerpt: "Vehicle return approved with BMW 20% / Dealer 80% internal allocation." },
-        { id: "CC-2025-0542", title: "Control-unit fault case", sourceType: "Closed case", relevance: 67, matchedOn: ["Related product fault", "Same vehicle-return request"], caveat: "Only one repair and no matching safety classification.", contribution: "Provides a counterexample and prevents copying an outcome without checking differences.", excerpt: "Return request was not approved because the evidence did not establish the same policy condition." },
+        { id: "3R-DEMO-0071", title: "Approved serious power-loss Buyback case", sourceType: "Approved case", relevance: 94, matchedOn: ["Same safety-performance fault", "Same Buyback request", "Same policy pathway"], caveat: "Different vehicle model and repair dates.", contribution: "Supports the valuation and party-allocation structure, not the example amounts.", excerpt: "Buyback was approved after the safety-performance fault remained unresolved following repeated repair attempts." },
+        { id: "3R-DEMO-0058", title: "High-voltage shutdown Buyback case", sourceType: "Approved case", relevance: 88, matchedOn: ["Comparable safety issue", "Same requested remedy", "Similar unsuccessful repair history"], caveat: "One additional repair attempt.", contribution: "Confirms that vehicle cost and humanity care are assessed separately.", excerpt: "Buyback approved with case-specific vehicle and humanity-care allocations." },
+        { id: "3R-DEMO-0034", title: "Control-unit fault case", sourceType: "Closed case", relevance: 67, matchedOn: ["Related product fault", "Same Buyback request"], caveat: "Only one repair and no matching safety classification.", contribution: "Provides a counterexample and prevents copying an outcome without checking differences.", excerpt: "Buyback was not approved because the evidence did not establish the same policy condition." },
       ],
     },
   },
@@ -153,10 +153,10 @@ export const optionalReviewAgents: ReviewAgent[] = [
           confidence: 89,
           fields: [
             { label: "Contact date", value: "20 May 2026", confidence: 97 },
-            { label: "Customer request", value: "Vehicle return", confidence: 94 },
+            { label: "Customer request", value: "Buyback", confidence: 94 },
             { label: "Dealer response", value: "BMW review required", confidence: 76 },
           ],
-          rawText: "Customer requests a vehicle return. Dealer explained that the case must be reviewed by BMW before eligibility can be confirmed.",
+          rawText: "Customer requests a Buyback review. Dealer explained that the case must be reviewed by BMW before eligibility can be confirmed.",
         },
       ],
     },
@@ -166,14 +166,35 @@ export const optionalReviewAgents: ReviewAgent[] = [
 
 export const settlementRecommendation = {
   type: "AI assessment · human decision required",
-  title: "Likely eligible for vehicle return",
+  title: "Buyback recommended",
   applicability: "Likely eligible",
-  bmwShare: 20,
-  dealerShare: 80,
-  summary: "The vehicle is in scope and TSARA classifies the unresolved loss of driving power as a serious safety-performance fault after repeated repair attempts. Three visits are supporting history, not the standalone legal basis. Internal allocation is assessed separately.",
+  summary: "The vehicle is in scope and TSARA classifies the unresolved loss of driving power as a serious safety-performance fault after repeated repair attempts. The proposal separates customer entitlement, vehicle valuation and internal cost allocation.",
+  solution: {
+    finalSolution: "Buyback",
+    tradeIn: "Yes",
+    tradeInModel: "X5 xDrive30Li M Sport",
+    usedCarPrice: 398000,
+    actualVehiclePrice: 589800,
+    customerCoverVehicle: 18000,
+    customerCoverHumanityCare: 0,
+    purchaseTax: 52195,
+    dealerCoverVehicle: 46000,
+    dealerCoverHumanityCare: 8000,
+    otherCost: 14005,
+    bmwCoverVehicle: 194000,
+    bmwCoverHumanityCare: 5000,
+    totalVehiclePurchaseCost: 656000,
+    vehicleCost: 258000,
+    humanityCareCost: 13000,
+    dealerCover: 54000,
+    customerCover: 18000,
+    bmwCoverOther: 0,
+    bmwTotalCover: 199000,
+    bmwRemark: "Demo calculation: accessories and early-termination costs are allocated between BMW and the dealer after case approval.",
+  },
   conclusions: [
     { id: "coverage", label: "Scope & repair count", value: "In scope · 3 visits not standalone threshold", agentId: "warranty", rationale: "Coverage is active, while the more-than-four-repairs condition is not met by three visits alone." },
     { id: "origin", label: "Fault source", value: "Product issue", agentId: "technical", rationale: "TSARA found a product issue and no dealer-caused damage." },
-    { id: "allocation", label: "Internal allocation", value: "BMW 20% / Dealer 80%", agentId: "knowledge", rationale: "Comparable approved cases inform this internal proposal; it is not a statutory customer entitlement." },
+    { id: "allocation", label: "Internal allocation", value: "Itemized amount proposal", agentId: "knowledge", rationale: "Comparable approved cases inform the cost structure; each amount remains case-specific and requires human approval." },
   ],
 };

@@ -12,12 +12,12 @@
   "workItems": [
     {
       "domain": "Customer Care",
-      "process": "Customer Complaint Handling",
-      "caseId": "CC-2026-0088",
+      "process": "3R Case Handling",
+      "caseId": "3R-DEMO-0096",
       "trigger": "Inbound customer call",
-      "intent": "Complaint · return candidate",
+      "intent": "Complaint · Buyback candidate",
       "priority": "High",
-      "status": "AI case created",
+      "status": "AI 3R Case created",
       "featured": true
     },
     {

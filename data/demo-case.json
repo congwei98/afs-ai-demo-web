@@ -1,45 +1,36 @@
 {
-  "id": "CC-2026-0088",
-  "customer": "Mr. Wang",
-  "vehicle": "BMW Demo Model",
-  "vin": "DEMO-VIN-0088",
+  "id": "3R-DEMO-0096",
+  "customer": "Demo Customer",
+  "vehicle": {
+    "model": "X5 xDrive30Li M Sport",
+    "eSeries": "G18",
+    "brand": "BMW",
+    "vin": "DEMO-VIN-0096",
+    "mileageKm": 12480,
+    "frd": "2024-10-18",
+    "complaintDate": "2026-05-12",
+    "serviceDealer": { "code": "58021", "name": "Chengdu Demo Auto" },
+    "dealerGroupName": "Western Mobility Demo Group",
+    "wholesaleDealer": { "code": "58021-W", "name": "Chengdu Demo Wholesale" },
+    "mediatedByThirdParty": "No"
+  },
   "priority": "High",
   "issue": "Recurring loss of power",
-  "request": "Vehicle return",
+  "request": "Buyback",
   "process": "Customer Complaints & Quality Handling",
   "complaint": {
     "callDuration": "03:42",
-    "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I request a vehicle return under the Three Guarantees policy.",
-    "scanSource": "Market Regulation Administration",
-    "scanReference": "MRA-2026-0512-0188",
-    "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal vehicle-return request."
+    "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I want to return the vehicle under the 3R policy.",
+    "scanSource": "Customer letter",
+    "scanReference": "DEMO-LETTER-0096",
+    "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal Buyback request."
   },
-  "objective": "Determine Three Guarantees scope and return conditions, then assess the customer remedy and internal BMW/dealer allocation separately.",
+  "objective": "Determine 3R scope and Buyback conditions, then assess the customer remedy and internal BMW/dealer allocation separately.",
   "agents": [
-    {
-      "name": "Customer Care",
-      "role": "Planner",
-      "task": "Plan the review, coordinate work and consolidate the applicability and compensation recommendation",
-      "findings": []
-    },
-    {
-      "name": "Warranty Agent",
-      "role": "Data Agent",
-      "task": "Confirm Three Guarantees eligibility",
-      "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"]
-    },
-    {
-      "name": "Technical Service Agent",
-      "role": "Data Agent",
-      "task": "Retrieve the TSARA Result and establish fault origin",
-      "findings": ["Serious safety-performance fault confirmed", "Fault persists after repeated repair attempts", "No dealer-induced damage"]
-    },
-    {
-      "name": "Case Knowledge Agent",
-      "role": "Knowledge Agent",
-      "task": "Review comparable compensation allocations",
-      "findings": ["3 comparable cases found", "Comparable cases support BMW 20% / Dealer 80%"]
-    }
+    { "name": "Customer Care", "role": "Planner", "task": "Plan the review, coordinate work and consolidate the applicability and Buyback recommendation", "findings": [] },
+    { "name": "Warranty Agent", "role": "Data Agent", "task": "Confirm 3R eligibility", "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"] },
+    { "name": "Technical Service Agent", "role": "Data Agent", "task": "Retrieve the TSARA result and establish fault origin", "findings": ["Serious safety-performance fault confirmed", "Fault persists after repeated repair attempts", "No dealer-induced damage"] },
+    { "name": "Case Knowledge Agent", "role": "Knowledge Agent", "task": "Review comparable Buyback cost allocations", "findings": ["3 comparable cases found", "Comparable cost items normalized for review"] }
   ],
   "access": {
     "scope": "This case only",
@@ -51,19 +42,19 @@
     ]
   },
   "records": [
-    { "date": "2025-10-18", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty records" },
-    { "date": "2025-12-02", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty records" },
-    { "date": "2026-02-11", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty records" },
-    { "date": "2026-05-20", "record": "TSARA Result TS-2026-117", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical records" }
+    { "date": "2025-11-06", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty records" },
+    { "date": "2026-01-14", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty records" },
+    { "date": "2026-03-09", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty records" },
+    { "date": "2026-05-08", "record": "TSARA Result TS-DEMO-204", "finding": "Product-related fault; no dealer-induced damage", "source": "Technical records" }
   ],
   "previousCases": [
-    { "caseId": "CC-2025-1123", "issue": "Recurring power loss", "handling": "Three Guarantees applicable", "outcome": "BMW 20% / Dealer 80%" },
-    { "caseId": "CC-2025-0876", "issue": "Repeated high-voltage shutdown", "handling": "Three Guarantees applicable", "outcome": "BMW 20% / Dealer 80%" },
-    { "caseId": "CC-2025-0542", "issue": "Major fault after one repair", "handling": "Not covered", "outcome": "Case closed" }
+    { "caseId": "3R-DEMO-0071", "issue": "Recurring power loss", "handling": "3R applicable", "outcome": "Buyback approved" },
+    { "caseId": "3R-DEMO-0058", "issue": "Repeated high-voltage shutdown", "handling": "3R applicable", "outcome": "Buyback approved with adjusted costs" },
+    { "caseId": "3R-DEMO-0034", "issue": "Major fault after one repair", "handling": "Not covered", "outcome": "Case closed" }
   ],
   "recommendation": {
-    "title": "Likely Eligible for Return · Human Decision Required",
-    "reasons": ["TSARA confirms an unresolved serious safety-performance fault", "Three visits are not used as the standalone threshold", "Internal BMW/dealer allocation is assessed separately from customer entitlement"]
+    "title": "Likely Eligible for Buyback · Human Decision Required",
+    "reasons": ["TSARA confirms an unresolved serious safety-performance fault", "Three visits are not used as the standalone threshold", "Internal cost allocation is assessed separately from customer entitlement"]
   },
-  "completionActions": ["Customer Care case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
+  "completionActions": ["3R Case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
 }
