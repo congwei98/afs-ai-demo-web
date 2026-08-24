@@ -15,7 +15,7 @@
       "process": "3R Case Handling",
       "caseId": "3R-DEMO-0096",
       "trigger": "Inbound customer call",
-      "intent": "Complaint · Buyback candidate",
+      "intent": "Complaint · vehicle-return request",
       "priority": "High",
       "status": "AI 3R Case created",
       "featured": true

@@ -16,19 +16,19 @@
   },
   "priority": "High",
   "issue": "Recurring loss of power",
-  "request": "Buyback",
+  "request": "Vehicle return",
   "process": "Customer Complaints & Quality Handling",
   "complaint": {
     "callDuration": "03:42",
     "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I want to return the vehicle under the 3R policy.",
     "scanSource": "Customer letter",
     "scanReference": "DEMO-LETTER-0096",
-    "scanSummary": "Written complaint records repeated power loss, three repair visits and a formal Buyback request."
+    "scanSummary": "Written complaint records repeated power loss, five repair visits for the same issue and a formal vehicle-return request."
   },
   "objective": "Determine 3R scope and Buyback conditions, then assess the customer remedy and internal BMW/dealer allocation separately.",
   "agents": [
     { "name": "Customer Care", "role": "Planner", "task": "Plan the review, coordinate work and consolidate the applicability and Buyback recommendation", "findings": [] },
-    { "name": "Warranty Agent", "role": "Data Agent", "task": "Confirm 3R eligibility", "findings": ["Coverage active", "3 repair visits verified", "Repair count alone does not meet the more-than-four condition"] },
+    { "name": "Warranty Agent", "role": "Data Agent", "task": "Confirm 3R eligibility", "findings": ["Coverage active", "5 repairs for the same quality issue verified", "More-than-four-repairs condition met"] },
     { "name": "Technical Service Agent", "role": "Data Agent", "task": "Check known quality issue and dealer repair negligence", "findings": ["Known product quality issue matched", "Required repair procedure followed", "No dealer repair negligence identified"] },
     { "name": "Case Knowledge Agent", "role": "Knowledge Agent", "task": "Review comparable Buyback cost allocations", "findings": ["3 comparable cases found", "Comparable cost items normalized for review"] }
   ],
@@ -42,9 +42,11 @@
     ]
   },
   "records": [
-    { "date": "2025-11-06", "record": "Repair Order 01", "finding": "Power loss repaired", "source": "Warranty records" },
-    { "date": "2026-01-14", "record": "Repair Order 02", "finding": "Same issue returned", "source": "Warranty records" },
-    { "date": "2026-03-09", "record": "Repair Order 03", "finding": "Issue remains unresolved", "source": "Warranty records" },
+    { "date": "2025-08-19", "record": "Repair Order 01", "finding": "Same power-loss issue · repair attempt 1", "source": "Warranty records" },
+    { "date": "2025-10-03", "record": "Repair Order 02", "finding": "Same power-loss issue · repair attempt 2", "source": "Warranty records" },
+    { "date": "2025-12-12", "record": "Repair Order 03", "finding": "Same power-loss issue · repair attempt 3", "source": "Warranty records" },
+    { "date": "2026-02-08", "record": "Repair Order 04", "finding": "Same power-loss issue · repair attempt 4", "source": "Warranty records" },
+    { "date": "2026-04-16", "record": "Repair Order 05", "finding": "Same power-loss issue · repair attempt 5; unresolved", "source": "Warranty records" },
     { "date": "2026-05-08", "record": "TSARA Result TS-DEMO-204", "finding": "Known quality issue; no dealer repair negligence", "source": "Technical records" }
   ],
   "previousCases": [
@@ -54,7 +56,7 @@
   ],
   "recommendation": {
     "title": "Likely Eligible for Buyback · Human Decision Required",
-    "reasons": ["Technical Service matches the symptom to a known quality issue", "No dealer repair negligence is identified", "Internal cost allocation is assessed separately from technical responsibility"]
+    "reasons": ["Warranty verifies five repairs for the same quality issue, exceeding four", "Technical Service matches the symptom to a known quality issue", "No dealer repair negligence is identified"]
   },
   "completionActions": ["3R Case completed", "Warranty evidence uploaded", "Technical findings attached", "Customer response draft prepared"]
 }

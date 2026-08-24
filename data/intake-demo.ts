@@ -77,7 +77,7 @@ export const historicalCalls: HistoricalCall[] = [
       { id: "call3-request", speaker: "Customer", time: "01:02", parts: [{ text: "I will allow one more repair, but " }, { text: "if the problem comes back I will ask to return the vehicle", semantic: "request" }, { text: "." }] },
       { id: "call3-outcome", speaker: "Customer Care", time: "01:31", parts: [{ text: "I have documented the expectation and " }, { text: "safety concern", semantic: "sentiment" }, { text: ". " }, { text: "Repair visit 3 will be arranged with Technical Service support", semantic: "outcome" }, { text: "." }] },
     ],
-    narrative: "After the second repair, the fault occurred again. The customer accepted one final repair but explicitly stated that another recurrence should trigger a formal 3R Buyback review.",
+    narrative: "After the second repair, the fault occurred again. The customer accepted one final repair but explicitly stated that another recurrence would lead to a vehicle-return request.",
     insights: [
       { key: "reason", label: "Contact reason", value: "Power loss returned after repair visit 2", evidenceId: "call3-reason", evidenceTime: "00:09" },
       { key: "repair", label: "Repair history", value: "2 linked visits; control unit replaced", evidenceId: "call3-repair", evidenceTime: "00:34" },
@@ -91,17 +91,17 @@ export const historicalCalls: HistoricalCall[] = [
 export const intakeDemo = {
   conversation: [
     { id: "opening", speaker: "Customer Care", time: "00:03", parts: [{ text: "Good morning. Please tell me what happened with your vehicle." }] },
-    { id: "issue", speaker: "Customer", time: "00:12", parts: [{ text: "It " }, { text: "lost power again while I was driving", semantic: "reason" }, { text: ". I have brought it in ", semantic: "repair" }, { text: "—but the same issue came back.", correction: { before: "twice", after: "sorry, three times" } }] },
-    { id: "clarify", speaker: "Customer Care", time: "00:27", parts: [{ text: "To confirm: the vehicle has had " }, { text: "three repair visits for the same loss-of-power issue", semantic: "repair" }, { text: "?" }] },
+    { id: "issue", speaker: "Customer", time: "00:12", parts: [{ text: "It " }, { text: "lost power again while I was driving", semantic: "reason" }, { text: ". I have brought it in ", semantic: "repair" }, { text: "—but the same issue came back.", correction: { before: "four times", after: "sorry, five times" } }] },
+    { id: "clarify", speaker: "Customer Care", time: "00:27", parts: [{ text: "To confirm: the vehicle has had " }, { text: "five repair visits for the same loss-of-power issue", semantic: "repair" }, { text: "?" }] },
     { id: "emotion", speaker: "Customer", time: "00:35", parts: [{ text: "Yes. I am " }, { text: "very frustrated, and I no longer feel safe driving it", semantic: "sentiment" }, { text: "." }] },
     { id: "ask", speaker: "Customer Care", time: "00:46", parts: [{ text: "What outcome would you like us to arrange?" }] },
-    { id: "request", speaker: "Customer", time: "00:52", parts: [{ text: "I want BMW to " }, { text: "take the vehicle back under the 3R policy", semantic: "request" }, { text: "." }] },
+    { id: "request", speaker: "Customer", time: "00:52", parts: [{ text: "I want to " }, { text: "return the vehicle under the 3R policy", semantic: "request" }, { text: "." }] },
   ] satisfies ConversationLine[],
-  narrative: "The same loss-of-power fault occurred again after three repair visits. The customer now feels unsafe driving the vehicle and formally requests a Buyback review under the 3R policy.",
+  narrative: "The same loss-of-power fault occurred again after five repair visits. The customer now feels unsafe driving the vehicle and formally requests a vehicle return under the 3R policy.",
   insights: [
     { key: "reason", label: "Contact reason", value: "Recurring loss of power", evidenceId: "issue", evidenceTime: "00:12" },
-    { key: "repair", label: "Repair history", value: "3 visits; same fault unresolved", evidenceId: "clarify", evidenceTime: "00:27" },
-    { key: "request", label: "Customer request", value: "Buyback review under 3R", evidenceId: "request", evidenceTime: "00:52" },
+    { key: "repair", label: "Repair history", value: "5 visits; same fault unresolved", evidenceId: "clarify", evidenceTime: "00:27" },
+    { key: "request", label: "Customer request", value: "Vehicle return under 3R", evidenceId: "request", evidenceTime: "00:52" },
     { key: "sentiment", label: "Customer sentiment", value: "Frustrated; safety concern", evidenceId: "emotion", evidenceTime: "00:35" },
     { key: "outcome", label: "Handling outcome", value: "" },
   ] satisfies CallInsight[],

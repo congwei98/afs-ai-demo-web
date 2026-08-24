@@ -39,7 +39,7 @@ export const reviewPlanContext = {
   recommendation:
     "Verify scope, test every relevant Buyback condition, trace the fault and parts timeline, then compare approved cases.",
   complaintSummary:
-    "The customer reports recurring loss of driving power after three dealer visits and requests a Buyback review under the 3R policy. Customer Care classified the call as a Buyback-candidate complaint; eligibility has not yet been decided.",
+    "The customer reports recurring loss of driving power after five repair visits for the same issue and requests a vehicle return under the 3R policy. Customer Care routed the request to the 3R Buyback Process Agent; eligibility has not yet been decided.",
 };
 
 export const recommendedReviewAgents: ReviewAgent[] = [
@@ -49,16 +49,18 @@ export const recommendedReviewAgents: ReviewAgent[] = [
     role: "Data Agent",
     category: "warranty",
     purpose: "Verify coverage and repair history",
-    requirement: "Get the repair and warranty records for this VIN. Verify the 3R period and map the repair facts to each relevant rule without treating three visits as a standalone Buyback condition.",
-    resultSummary: "Coverage is active. Three visits are verified, but that count alone does not meet the more-than-four-repairs condition.",
-    decisionImpact: "Confirms scope and prevents an incorrect repair-count conclusion; other independent conditions still require review.",
+    requirement: "Get the repair and warranty records for this VIN. Verify the 3R period, confirm that all records concern the same quality issue, and determine whether the repair count exceeds four.",
+    resultSummary: "Coverage is active. Five completed repair attempts are verified for the same loss-of-power quality issue, so the more-than-four-repairs condition is met.",
+    decisionImpact: "Provides the qualifying 3R condition used by the recommendation: the same quality issue was repaired five times and remains unresolved.",
     sources: {
       type: "data",
       title: "Warranty & repair records",
       records: [
-        { id: "RO-450218", date: "18 Oct 2025", facts: ["Power loss reported", "Software reset performed"], relevance: "Starts the recurring-fault history.", rawPreview: "Repair order confirms the first recorded loss-of-power complaint and software reset." },
-        { id: "RO-468011", date: "02 Dec 2025", facts: ["Same symptom returned", "Control unit replaced"], relevance: "Confirms the same fault returned after repair.", rawPreview: "Repair order records the repeated symptom and control-unit replacement." },
-        { id: "RO-492674", date: "11 Feb 2026", facts: ["Third repair attempt", "Issue remains unresolved"], relevance: "Supports repeated unsuccessful repair history; not a standalone legal threshold.", rawPreview: "Repair order confirms the third visit and unresolved customer complaint." },
+        { id: "RO-DEMO-101", date: "19 Aug 2025", facts: ["Same loss-of-power issue", "Repair attempt 1", "Software update completed"], relevance: "Starts the verified same-issue repair sequence.", rawPreview: "Repair order confirms the first repair attempt for the recurring loss-of-power issue." },
+        { id: "RO-DEMO-102", date: "03 Oct 2025", facts: ["Same loss-of-power issue", "Repair attempt 2", "Control unit inspected"], relevance: "Confirms the second repair for the same quality issue.", rawPreview: "Repair order links the repeated symptom to the same fault family." },
+        { id: "RO-DEMO-103", date: "12 Dec 2025", facts: ["Same loss-of-power issue", "Repair attempt 3", "Control unit replaced"], relevance: "Confirms the third completed repair attempt.", rawPreview: "Repair order records the same issue and the third completed repair." },
+        { id: "RO-DEMO-104", date: "08 Feb 2026", facts: ["Same loss-of-power issue", "Repair attempt 4", "Harness inspected"], relevance: "Confirms the fourth completed repair attempt.", rawPreview: "Repair order records continued recurrence after the fourth repair." },
+        { id: "RO-DEMO-105", date: "16 Apr 2026", facts: ["Same loss-of-power issue", "Repair attempt 5", "Issue remains unresolved"], relevance: "Makes the verified repair count exceed four for the same quality issue.", rawPreview: "Repair order confirms the fifth completed repair attempt and unresolved symptom." },
       ],
     },
   },
@@ -166,9 +168,14 @@ export const optionalReviewAgents: ReviewAgent[] = [
 
 export const settlementRecommendation = {
   type: "AI assessment · human decision required",
-  title: "Buyback recommended",
+  title: "Buyback recommended · 3R condition met",
   applicability: "Likely eligible",
-  summary: "The vehicle is in scope and Technical Service confirms that the symptom matches a known product quality issue. The dealer followed the required repair procedure and no repair negligence was identified. Buyback is recommended on the product-quality pathway; the proposed dealer contribution is a commercial allocation rather than a fault finding.",
+  summary: "Warranty verifies five completed repairs for the same quality issue, which exceeds the more-than-four-repairs condition. Technical Service confirms a known product quality issue and finds no dealer repair negligence. Buyback is therefore recommended; the proposed dealer contribution is a commercial allocation rather than a fault finding.",
+  eligibility: {
+    condition: "Same quality issue repaired more than four times",
+    evidence: "5 verified repair orders · same loss-of-power issue · still unresolved",
+    result: "3R condition met",
+  },
   solution: {
     finalSolution: "Buyback",
     tradeIn: "Yes",
@@ -193,7 +200,7 @@ export const settlementRecommendation = {
     bmwRemark: "Demo calculation: accessories and early-termination costs are allocated between BMW and the dealer after case approval.",
   },
   conclusions: [
-    { id: "coverage", label: "Scope & repair count", value: "In scope · 3 visits not standalone threshold", agentId: "warranty", rationale: "Coverage is active, while the more-than-four-repairs condition is not met by three visits alone." },
+    { id: "coverage", label: "3R repair-count condition", value: "Met · 5 same-issue repairs", agentId: "warranty", rationale: "Warranty verifies five completed repairs for the same quality issue, exceeding the more-than-four-repairs condition." },
     { id: "origin", label: "Technical Service assessment", value: "Known quality issue · no dealer negligence", agentId: "technical", rationale: "Technical Service matched the symptom to a known quality issue and confirmed that the dealer followed the prescribed repair procedure." },
     { id: "allocation", label: "Internal allocation", value: "Itemized amount proposal", agentId: "knowledge", rationale: "Comparable approved cases inform the cost structure; each amount remains case-specific and requires human approval." },
   ],

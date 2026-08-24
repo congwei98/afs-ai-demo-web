@@ -81,7 +81,7 @@ type EditableAmountKey =
 const steps = ["Intake", "Route", "Dealer Evidence", "Review", "Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
 const dealerEvidenceAttachments: DealerAttachment[] = [
-  { name: "Repair orders.pdf", type: "PDF", detail: "3 repair orders · service history" },
+  { name: "Repair orders.pdf", type: "PDF", detail: "5 repair orders · same-issue history" },
   { name: "TSARA diagnosis report.pdf", type: "PDF", detail: "Technical finding · 20 May 2026" },
   { name: "Parts order timeline.xlsx", type: "XLSX", detail: "Order and arrival dates" },
   { name: "Customer contact record.pdf", type: "PDF", detail: "Dealer communication record" },
@@ -380,15 +380,15 @@ function RoutingDecisionScreen({ onConfirm, onModify }: { onConfirm: () => void;
     <section className="screen-panel routing-screen">
       <div className="screen-heading"><div><p className="section-kicker">LEADING / ROUTER AGENT</p><h2>Review AI Routing Suggestion</h2></div></div>
       <section className="routing-summary">
-        <div className="routing-score"><MagicWand size={26} aria-hidden="true" /><span>ROUTING SUGGESTION</span><strong>Buyback complaint candidate</strong><small>94% confidence · Decision RD-0096 v1</small></div>
+        <div className="routing-score"><MagicWand size={26} aria-hidden="true" /><span>ROUTING SUGGESTION</span><strong>Vehicle-return complaint candidate</strong><small>94% confidence · Decision RD-0096 v1</small></div>
         <div className="routing-facts">
           <article><span>Complaint classification</span><strong>COMPLAINT</strong><p>Recurring unresolved fault, safety concern and a requested remedy.</p></article>
-          <article><span>Candidate signal</span><strong>BUYBACK_CANDIDATE</strong><p>Customer explicitly asks for a Buyback review under the 3R policy.</p></article>
+          <article><span>Customer request</span><strong>VEHICLE_RETURN_REQUEST</strong><p>The customer explicitly asks to return the vehicle under the 3R policy.</p></article>
           <article><span>Approved next action</span><strong>HAND_OFF_TO_BUYBACK_PROCESS_AGENT</strong><p>After human confirmation, the Router Agent hands the case to the Process Agent, which then creates the CCO 3R Case.</p></article>
-          <article className="caution"><span>Important boundary</span><strong>Not an eligibility decision</strong><p>Three repair visits do not by themselves satisfy the “more than four repairs” condition.</p></article>
+          <article className="caution"><span>Important boundary</span><strong>Not an eligibility decision</strong><p>The customer reports five same-issue repairs. Warranty must verify the records before the 3R condition is accepted.</p></article>
         </div>
       </section>
-      <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want BMW to take the vehicle back under the 3R policy.”</h3></div></header><div><span className="signal-tag">Explicit Buyback request</span><span className="signal-tag">Recurring power loss</span><span className="risk-tag">Safety concern</span></div></section>
+      <section className="routing-evidence"><header><Eye size={19} /><div><span>CALL EVIDENCE · 00:52</span><h3>“I want to return the vehicle under the 3R policy.”</h3></div></header><div><span className="signal-tag">Explicit vehicle-return request</span><span className="signal-tag">5 reported repair visits</span><span className="risk-tag">Safety concern</span></div></section>
       <section className="nl-routing-command">
         <div className="nl-command-heading"><div className="ai-command-icon"><ChatText size={22} /></div><div><span>NATURAL-LANGUAGE CONTROL</span><h3>Tell the Router whether you agree or how to change the decision</h3><p>Agree with AI pre-fills the handoff instruction. You can edit it before executing the route.</p></div></div>
         <div className="command-examples" aria-label="Example routing instructions"><button onClick={agreeWithAi}>Agree with AI</button><button onClick={() => updateRoutingAction("Do not start the Buyback process. Keep this as another Customer Care complaint.")}>Keep as other complaint</button><button onClick={() => updateRoutingAction("Change the route to Warranty Exception Review.")}>Route to Warranty</button><button onClick={() => updateRoutingAction("Send this case to Technical Service for diagnosis.")}>Route to Technical Service</button></div>
@@ -452,7 +452,7 @@ function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench 
 }
 
 function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
-  const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a Buyback review. Dealer explained that eligibility requires BMW review.");
+  const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
   const [files, setFiles] = useState([true, true, true, true]);
   const ready = summary.trim().length >= 20 && files.every(Boolean);
   return (
@@ -610,7 +610,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, analyzed, setAna
   return (
     <section className="screen-panel intake-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
-      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED 3R CASE</span><strong>Created automatically from inbound call intent</strong><p>Intent detected: complaint · potential Buyback request. Open the current recording to review the live transcript and AI extraction.</p></div><b>3R Case {caseData.id}</b></section>
+      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT CASE</span><strong>Created automatically from inbound call intent</strong><p>Intent detected: complaint · explicit vehicle-return request. Open the current recording to review the live transcript and AI extraction.</p></div><b>Case {caseData.id}</b></section>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>
@@ -844,6 +844,13 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
           <div className="decision-ai-mark"><MagicWand size={22} aria-hidden="true" /><span>AI RECOMMENDATION</span></div>
           <h3 id="decision-recommendation-title">{settlementRecommendation.title}</h3>
           <p>{settlementRecommendation.summary}</p>
+          <div className="qualification-path" aria-label="Why this case meets the 3R condition">
+            <article><span>APPLICABLE CONDITION</span><strong>{settlementRecommendation.eligibility.condition}</strong></article>
+            <ArrowRight size={20} aria-hidden="true" />
+            <article><span>CASE EVIDENCE</span><strong>{settlementRecommendation.eligibility.evidence}</strong></article>
+            <ArrowRight size={20} aria-hidden="true" />
+            <article className="qualification-result"><span>ASSESSMENT</span><strong><CheckCircle size={18} weight="fill" aria-hidden="true" />{settlementRecommendation.eligibility.result}</strong></article>
+          </div>
           <div className="decision-boundary"><WarningCircle size={18} aria-hidden="true" /><span>Assessment only. A Customer Care specialist makes the final decision.</span></div>
         </section>
 
@@ -896,7 +903,7 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
         <section className="decision-editor" aria-labelledby="human-decision-title">
           <div><span>HUMAN DECISION</span><h3 id="human-decision-title">Confirm or change the proposed action</h3><p>The draft is editable. Write the action in the language you want the Process Agent to execute.</p></div>
           <label htmlFor="decision-instruction"><span>Decision instruction <b>AI draft · editable</b></span><textarea id="decision-instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
-          <label className="decision-review-check"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /><span>I reviewed the policy conditions, source evidence and internal allocation separately.</span></label>
+          <label className="decision-review-check"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /><span>I reviewed the five same-issue repair records, Technical Service finding and internal allocation separately.</span></label>
         </section>
       </div>
       <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim() || !reviewed} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div>
