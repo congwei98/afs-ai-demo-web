@@ -110,6 +110,7 @@ export default function ProcessApp() {
   const [resultAgentId, setResultAgentId] = useState<string | null>(null);
   const [source, setSource] = useState<ComplaintSource>("call");
   const [playing, setPlaying] = useState(false);
+  const [intakeAnalyzed, setIntakeAnalyzed] = useState(false);
   const [caseCompleted, setCaseCompleted] = useState(false);
   const [routeConfirmed, setRouteConfirmed] = useState(false);
   const [routeExecutionStarted, setRouteExecutionStarted] = useState(false);
@@ -173,7 +174,7 @@ export default function ProcessApp() {
         <div className="case-main">
           <CaseIdentity />
           {stage === 1 && (
-            <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} onNext={() => setStage(2)} />
+            <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} analyzed={intakeAnalyzed} setAnalyzed={setIntakeAnalyzed} onNext={() => setStage(2)} />
           )}
           {stage === 2 && !routeExecutionStarted && <RoutingDecisionScreen onConfirm={() => { setRouteConfirmed(true); setRouteExecutionStarted(true); }} onModify={(target) => { setRoutedDomain(target); backToWorkbench(); }} />}
           {stage === 2 && routeExecutionStarted && <CreateComplaintCaseExecution created={ccoCaseCreated} onCreated={() => setCcoCaseCreated(true)} onWorkbench={backToWorkbench} />}
@@ -443,16 +444,16 @@ function AIUnderstandingPanel({ insights, narrative, revealed, onEvidence, worki
   );
 }
 
-function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { source: ComplaintSource; setSource: (value: ComplaintSource) => void; playing: boolean; setPlaying: (value: boolean) => void; onNext: () => void }) {
+function IntakeScreen({ source, setSource, playing, setPlaying, analyzed, setAnalyzed, onNext }: { source: ComplaintSource; setSource: (value: ComplaintSource) => void; playing: boolean; setPlaying: (value: boolean) => void; analyzed: boolean; setAnalyzed: (value: boolean) => void; onNext: () => void }) {
+  const conversation: ConversationLine[] = intakeDemo.conversation;
   const [activeLine, setActiveLine] = useState(0);
   const [visibleCharacters, setVisibleCharacters] = useState(0);
-  const [correctedLines, setCorrectedLines] = useState<Set<string>>(new Set());
-  const [complete, setComplete] = useState(false);
+  const [correctedLines, setCorrectedLines] = useState<Set<string>>(() => analyzed ? new Set(conversation.filter((line) => line.parts.some((part) => part.correction)).map((line) => line.id)) : new Set<string>());
+  const [complete, setComplete] = useState(analyzed);
   const [focusedEvidence, setFocusedEvidence] = useState<string | null>(null);
   const [selectedCallId, setSelectedCallId] = useState<string>("current");
   const [historyPlayingId, setHistoryPlayingId] = useState<string | null>(null);
   const [historyProgress, setHistoryProgress] = useState(0);
-  const conversation: ConversationLine[] = intakeDemo.conversation;
   const selectedHistoricalCall = historicalCalls.find((call) => call.id === selectedCallId);
   const currentLine = conversation[activeLine];
   const currentRawText = currentLine ? rawLineText(currentLine) : "";
@@ -498,10 +499,11 @@ function IntakeScreen({ source, setSource, playing, setPlaying, onNext }: { sour
 
     const timer = window.setTimeout(() => {
       setComplete(true);
+      setAnalyzed(true);
       setPlaying(false);
     }, 425);
     return () => window.clearTimeout(timer);
-  }, [activeLine, conversation.length, correctedLines, currentLine, currentRawText, playing, setPlaying, source, visibleCharacters]);
+  }, [activeLine, conversation.length, correctedLines, currentLine, currentRawText, playing, setAnalyzed, setPlaying, source, visibleCharacters]);
 
   useEffect(() => {
     if (!historyPlayingId) return;
