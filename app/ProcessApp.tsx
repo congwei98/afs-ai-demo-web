@@ -91,7 +91,7 @@ const ccoCreationActions = [
   { title: "Hand over the approved route", detail: `The Router Agent hands the case and call evidence to the ${reviewProcessAgentName}.` },
   { title: "Build the 3R Case request", detail: "The Process Agent prepares the CCO request with the approved route and customer context." },
   { title: "Create the 3R Case in CCO", detail: "The Execution Agent calls CCO once with the Process Agent request and an idempotency key." },
-  { title: "Receive the CCO 3R Case record", detail: `CCO provides 3R Case ${caseData.id} and confirms that the record was created.` },
+  { title: "Receive the CCO 3R Case record", detail: "CCO generates the 3R Case ID and returns the created record." },
   { title: "Set the asynchronous wait state", detail: "The Process Agent records WAITING_DEALER_EVIDENCE and closes this Route task." },
 ];
 
@@ -216,7 +216,7 @@ export default function ProcessApp() {
       <StageStepper stage={stage} timeline={timeline} onSelect={(next) => next <= stage && setStage(next)} />
       <section className="case-layout">
         <div className="case-main">
-          <CaseIdentity />
+          <CaseIdentity caseIdAvailable={ccoCaseCreated} stage={stage} />
           {stage === 1 && (
             <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} analyzed={intakeAnalyzed} setAnalyzed={setIntakeAnalyzed} onNext={() => setStage(2)} />
           )}
@@ -303,7 +303,7 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
                 const status = completed ? "Completed" : reviewReady ? "REVIEW_READY" : waitingForDealer ? "WAITING_DEALER_EVIDENCE" : item.status;
                 const actionLabel = completed ? "View" : reviewReady ? "Open Review" : waitingForDealer ? "Mock Dealer Submit" : "Open";
                 const action = waitingForDealer ? onDealerMock : onOpen;
-                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />{ccoCaseCreated ? "CCO 3R Case created" : "AI-created from call"}</small>}</strong><span>{item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={`${isDemo ? "case-status new" : "case-status"} ${waitingForDealer ? "waiting" : ""} ${reviewReady ? "ready" : ""}`}>{isDemo ? status : item.status}</b></span><span><button className={isDemo ? waitingForDealer ? "secondary-button" : "primary-button" : "text-button"} onClick={isDemo ? action : undefined} disabled={!isDemo}>{actionLabel}</button></span></div>;
+                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />{ccoCaseCreated ? "CCO 3R Case created" : "AI-created from call"}</small>}</strong><span>{isDemo && !ccoCaseCreated ? "Pending route" : item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={`${isDemo ? "case-status new" : "case-status"} ${waitingForDealer ? "waiting" : ""} ${reviewReady ? "ready" : ""}`}>{isDemo ? status : item.status}</b></span><span><button className={isDemo ? waitingForDealer ? "secondary-button" : "primary-button" : "text-button"} onClick={isDemo ? action : undefined} disabled={!isDemo}>{actionLabel}</button></span></div>;
               })}
               {items.length === 0 && <div className="domain-empty"><CheckCircle size={24} /><strong>No active cases in this domain</strong><span>Select another process domain.</span></div>}
             </div>
@@ -334,7 +334,7 @@ function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: 
   );
 }
 
-function CaseIdentity() {
+function CaseIdentity({ caseIdAvailable, stage }: { caseIdAvailable: boolean; stage: number }) {
   const vehicle = caseData.vehicle;
   const details = [
     ["Model", vehicle.model],
@@ -349,9 +349,11 @@ function CaseIdentity() {
     ["Wholesale Dealer Code & Name", `${vehicle.wholesaleDealer.code} · ${vehicle.wholesaleDealer.name}`],
     ["Mediated By Third Party", vehicle.mediatedByThirdParty],
   ];
+  const preCaseLabel = stage === 1 ? "INTAKE CONTEXT" : "ROUTE IN PROGRESS";
+  const preCaseTitle = stage === 1 ? "Inbound vehicle-return complaint" : "Creating 3R Case in CCO";
   return (
     <section className="case-identity" aria-labelledby="case-identity-title">
-      <header><span className="case-identity-icon"><FolderOpen size={24} aria-hidden="true" /></span><div><span>3R CASE</span><strong id="case-identity-title">{caseData.id}</strong><small><Car size={15} aria-hidden="true" />{vehicle.model} · {vehicle.vin}</small></div></header>
+      <header><span className="case-identity-icon"><FolderOpen size={24} aria-hidden="true" /></span><div><span>{caseIdAvailable ? "3R CASE" : preCaseLabel}</span><strong id="case-identity-title">{caseIdAvailable ? caseData.id : preCaseTitle}</strong><small><Car size={15} aria-hidden="true" />{vehicle.model} · {vehicle.vin}</small></div></header>
       <dl className="case-identity-details">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     </section>
   );
@@ -431,7 +433,7 @@ function CreateComplaintCaseExecution({ created, onCreated, onWorkbench }: { cre
         </div>
         <p className="execution-status" role="status" aria-live="polite"><span className={complete ? "map-check" : "spinner"}>{complete && <Check size={12} weight="bold" />}</span>{currentMessage}</p>
       </section>
-      {complete && <section className="route-complete-banner"><CheckCircle size={28} weight="fill" /><div><strong>Route task complete · waiting happens in the Workbench</strong><span>CCO Case {caseData.id} · Status <b>WAITING_DEALER_EVIDENCE</b> · Idempotency key verified</span></div></section>}
+      {complete && <section className="route-complete-banner"><CheckCircle size={28} weight="fill" /><div><strong>Route task complete · 3R Case ID generated</strong><span>CCO 3R Case {caseData.id} · Status <b>WAITING_DEALER_EVIDENCE</b> · Idempotency key verified</span></div></section>}
       <div className="screen-actions completion-actions"><span>Next event: <b>DealerSubmissionCompleted</b></span><button className="primary-button wide button-with-icon" disabled={!complete} onClick={onWorkbench}><ArrowLeft size={18} />Return to Workbench</button></div>
     </section>
   );
@@ -610,7 +612,7 @@ function IntakeScreen({ source, setSource, playing, setPlaying, analyzed, setAna
   return (
     <section className="screen-panel intake-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE</p><h2>Complaint Intake</h2></div><span className={`ai-intake-status ${playing ? "working" : complete || source === "scan" || (source === "call" && selectedHistoricalCall) ? "complete" : ""}`} role="status" aria-atomic="true"><MagicWand size={17} aria-hidden="true" />{source === "scan" ? "Document analyzed" : selectedHistoricalCall ? "Previously analyzed" : playing ? "AI is listening" : complete ? "Call analyzed" : "Ready to analyze"}</span></div>
-      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT CASE</span><strong>Created automatically from inbound call intent</strong><p>Intent detected: complaint · explicit vehicle-return request. Open the current recording to review the live transcript and AI extraction.</p></div><b>Case {caseData.id}</b></section>
+      <section className="auto-created-case"><Sparkle size={19} weight="fill" /><div><span>AI-GENERATED COMPLAINT DRAFT</span><strong>Prepared automatically from inbound call intent</strong><p>Intent detected: complaint · explicit vehicle-return request. A CCO 3R Case will be created only after the Route decision is approved and executed.</p></div><b>Route review required</b></section>
       <div className="source-tabs" role="tablist">
         <button role="tab" aria-selected={source === "call"} className={source === "call" ? "active" : ""} onClick={() => setSource("call")}><PhoneCall size={18} aria-hidden="true" />Call Recording</button>
         <button role="tab" aria-selected={source === "scan"} className={source === "scan" ? "active" : ""} onClick={() => setSource("scan")}><Scan size={18} aria-hidden="true" />Scanned Complaint</button>

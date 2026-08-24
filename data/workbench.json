@@ -17,7 +17,7 @@
       "trigger": "Inbound customer call",
       "intent": "Complaint · vehicle-return request",
       "priority": "High",
-      "status": "AI 3R Case created",
+      "status": "Route review required",
       "featured": true
     },
     {
