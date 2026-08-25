@@ -71,6 +71,9 @@ type DealerNegotiationUpdate = {
   updatedAt: string;
 };
 type ScopeCheckResult = "within" | "outside";
+type InvestigationApprovalKey = "a6" | "a3";
+type InvestigationApprovalStatus = "pending" | "approved" | "changes_requested";
+type InvestigationApprovals = Record<InvestigationApprovalKey, InvestigationApprovalStatus>;
 type BuybackSolution = typeof settlementRecommendation.solution;
 type EditableAmountKey =
   | "actualVehiclePrice"
@@ -85,7 +88,7 @@ type EditableAmountKey =
   | "bmwCoverHumanityCare"
   | "bmwCoverOther";
 
-const steps = ["Intake", "Route", "Dealer Negotiation", "3R Scope Check", "3R Case Setup", "Review", "Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Negotiation", "3R Scope Check", "3R Case Setup", "Investigation", "Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
 const complaintId = "CCO-CMP-2026-0096";
 const processInstanceId = "BBP-2026-0096";
@@ -174,16 +177,18 @@ export default function ProcessApp() {
   const [buybackDraft, setBuybackDraft] = useState<BuybackSolution>(() => calculateBuybackSolution({ ...settlementRecommendation.solution }));
   const [decisionInstruction, setDecisionInstruction] = useState(createDecisionInstruction);
   const [plannedAgents, setPlannedAgents] = useState<ReviewAgent[]>(() => recommendedReviewAgents.map((agent) => ({ ...agent })));
+  const [investigationApprovals, setInvestigationApprovals] = useState<InvestigationApprovals>({ a6: "pending", a3: "pending" });
 
   const openCase = () => {
     setView("case");
-    setStage(dealerSubmission ? 5 : scopeCheckResult ? 4 : dealerNegotiation ? 3 : 1);
-    setReviewState("plan");
-    setAccessGranted(false);
-    setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
-    const initialBuybackDraft = calculateBuybackSolution({ ...settlementRecommendation.solution });
-    setBuybackDraft(initialBuybackDraft);
-    setDecisionInstruction(createDecisionInstruction(initialBuybackDraft));
+    setStage(reviewState === "running" || reviewState === "results" ? 6 : dealerSubmission ? 5 : scopeCheckResult ? 4 : dealerNegotiation ? 3 : 1);
+    if (reviewState === "plan") {
+      setAccessGranted(false);
+      setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
+      const initialBuybackDraft = calculateBuybackSolution({ ...settlementRecommendation.solution });
+      setBuybackDraft(initialBuybackDraft);
+      setDecisionInstruction(createDecisionInstruction(initialBuybackDraft));
+    }
   };
 
   const backToWorkbench = () => {
@@ -197,6 +202,12 @@ export default function ProcessApp() {
     setReviewState("running");
   };
 
+  const updateInvestigationApproval = (key: InvestigationApprovalKey, status: InvestigationApprovalStatus) => {
+    setInvestigationApprovals((current) => ({ ...current, [key]: status }));
+  };
+
+  const resetInvestigationApprovals = () => setInvestigationApprovals({ a6: "pending", a3: "pending" });
+
   const completeCase = () => {
     setCaseCompleted(false);
     setStage(8);
@@ -209,7 +220,7 @@ export default function ProcessApp() {
       { label: "Dealer negotiation completed", done: Boolean(dealerNegotiation) },
       { label: "3R effective scope checked", done: Boolean(scopeCheckResult) },
       { label: "3R Case setup completed", done: Boolean(dealerSubmission) && getMissingDealerSetupItems(dealerSubmission).length === 0 },
-      { label: "Agent review completed", done: reviewState === "results" || stage > 6 },
+      { label: "Investigation completed", done: reviewState === "results" || stage > 6 },
       { label: "Recommendation prepared", done: stage >= 7 },
       { label: "Case completed", done: caseCompleted },
     ];
@@ -218,9 +229,10 @@ export default function ProcessApp() {
   }, [caseCompleted, ccoCaseCreated, dealerNegotiation, dealerSubmission, reviewState, routeConfirmed, scopeCheckResult, stage]);
 
   if (view === "workbench") return <>
-    <Workbench onOpen={openCase} onNegotiationMock={() => setNegotiationMockOpen(true)} onDealerSetupMock={() => setDealerSetupMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerNegotiation={dealerNegotiation} scopeCheckResult={scopeCheckResult} dealerSubmission={dealerSubmission} />
+    <Workbench onOpen={openCase} onNegotiationMock={() => setNegotiationMockOpen(true)} onDealerSetupMock={() => setDealerSetupMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerNegotiation={dealerNegotiation} scopeCheckResult={scopeCheckResult} dealerSubmission={dealerSubmission} reviewState={reviewState} agents={plannedAgents} approvals={investigationApprovals} onApproval={updateInvestigationApproval} onResult={setResultAgentId} />
     {negotiationMockOpen && <DealerNegotiationMockModal onCancel={() => setNegotiationMockOpen(false)} onSubmit={(update) => { setDealerNegotiation(update); setNegotiationMockOpen(false); }} />}
     {dealerSetupMockOpen && <DealerCaseSetupMockModal existing={dealerSubmission} onCancel={() => setDealerSetupMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerSetupMockOpen(false); }} />}
+    {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel="Back to Workbench approval" onClose={() => setResultAgentId(null)} />}
   </>;
 
   return (
@@ -250,8 +262,11 @@ export default function ProcessApp() {
                 setAccessGranted(false);
               }}
               dealerSubmission={dealerSubmission}
+              approvals={investigationApprovals}
+              onResetApprovals={resetInvestigationApprovals}
               onResult={setResultAgentId}
               onNext={() => setStage(7)}
+              onWorkbench={backToWorkbench}
             />
           )}
           {stage === 7 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(6)} onConfirm={completeCase} />}
@@ -295,18 +310,28 @@ function ComplaintContext({ complaintCreated, stage }: { complaintCreated: boole
   );
 }
 
-function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, routedDomain, ccoCaseCreated, dealerNegotiation, scopeCheckResult, dealerSubmission }: { onOpen: () => void; onNegotiationMock: () => void; onDealerSetupMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerNegotiation: DealerNegotiationUpdate | null; scopeCheckResult: ScopeCheckResult | null; dealerSubmission: DealerSubmission | null }) {
+function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, routedDomain, ccoCaseCreated, dealerNegotiation, scopeCheckResult, dealerSubmission, reviewState, agents, approvals, onApproval, onResult }: { onOpen: () => void; onNegotiationMock: () => void; onDealerSetupMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerNegotiation: DealerNegotiationUpdate | null; scopeCheckResult: ScopeCheckResult | null; dealerSubmission: DealerSubmission | null; reviewState: ReviewState; agents: ReviewAgent[]; approvals: InvestigationApprovals; onApproval: (key: InvestigationApprovalKey, status: InvestigationApprovalStatus) => void; onResult: (agentId: string) => void }) {
   const [selectedDomain, setSelectedDomain] = useState(routedDomain ?? "Customer Care");
   const items = workbenchData.workItems.map((item) => item.caseId === caseData.id && routedDomain ? { ...item, domain: routedDomain, status: "Human-rerouted" } : item).filter((item) => item.domain === selectedDomain);
   const activeDomain = workbenchData.domains.find((domain) => domain.name === selectedDomain) ?? workbenchData.domains[0];
   const featuredItem = items.find((item) => item.caseId === caseData.id);
   const queueItems = items.filter((item) => item.caseId !== caseData.id);
+  const approvalsComplete = approvals.a6 === "approved" && approvals.a3 === "approved";
+  const approvalTask = reviewState === "results" && selectedDomain === "Technical Service"
+    ? { key: "a6" as const, owner: "A6" as const, agent: agents.find((agent) => agent.id === "technical") }
+    : reviewState === "results" && selectedDomain === "Warranty"
+      ? { key: "a3" as const, owner: "A3" as const, agent: agents.find((agent) => agent.id === "parts") }
+      : null;
   const waitingForDealer = Boolean(featuredItem) && ccoCaseCreated && !dealerNegotiation && !completed;
   const dealerOutcomeReady = Boolean(featuredItem) && Boolean(dealerNegotiation) && !scopeCheckResult && !completed;
   const scopeComplete = Boolean(featuredItem) && Boolean(scopeCheckResult) && !completed;
   const resolvedByAgreement = dealerOutcomeReady && dealerNegotiation?.outcome === "settled";
   const featuredState = completed
     ? { title: "View completed case", description: "The current Demo flow is complete and its execution receipt is available.", stage: "Completed", waitingOn: "No blocker", status: "Completed", action: "View", handler: onOpen }
+    : reviewState === "results"
+      ? approvalsComplete
+        ? { title: "Investigation approvals complete", description: "A6 approved the quality assessment and A3 approved the parts timeline. The investigation can now continue to the human Decision step.", stage: "Investigation Complete", waitingOn: "Customer Care · A7", status: "Action required", action: "Continue to Decision", handler: onOpen }
+        : { title: "Investigation approvals pending", description: "Agent queries are complete. Open Technical Service for the A6 approval and Warranty for the A3 parts-timeline approval.", stage: "Investigation Approval", waitingOn: "A6 · A3", status: "Waiting for approval", action: "View investigation", handler: onOpen }
     : scopeComplete
       ? scopeCheckResult === "within"
         ? dealerSubmission
@@ -341,7 +366,7 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
             {workbenchData.metrics.map((metric) => <article key={metric.label}><span>{metric.label}</span><strong>{metric.label === "Completed today" && completed ? metric.value + 1 : metric.value}</strong></article>)}
           </div>
           {featuredItem && <section className="workbench-focus" aria-labelledby="next-action-title">
-            <header><span className="focus-icon"><Sparkle size={24} weight="fill" aria-hidden="true" /></span><div><p>MY NEXT ACTION</p><h2 id="next-action-title">{featuredState.title}</h2><span>{featuredState.description}</span></div><b className={`focus-status ${waitingForDealer || (scopeCheckResult === "within" && scopeComplete && !dealerSubmission) ? "waiting" : completed || resolvedByAgreement || scopeCheckResult === "outside" ? "ready" : "action"}`}>{featuredState.status}</b></header>
+            <header><span className="focus-icon"><Sparkle size={24} weight="fill" aria-hidden="true" /></span><div><p>MY NEXT ACTION</p><h2 id="next-action-title">{featuredState.title}</h2><span>{featuredState.description}</span></div><b className={`focus-status ${waitingForDealer || (scopeCheckResult === "within" && scopeComplete && !dealerSubmission) || (reviewState === "results" && !approvalsComplete) ? "waiting" : completed || resolvedByAgreement || scopeCheckResult === "outside" ? "ready" : "action"}`}>{featuredState.status}</b></header>
             <div className="focus-body">
               <dl className="focus-records"><div><dt>Call ID</dt><dd>{featuredItem.callId}</dd></div><div><dt>Complaint ID</dt><dd>{ccoCaseCreated ? complaintId : "Not created"}</dd></div><div><dt>3R Case ID</dt><dd>{dealerSubmission?.caseId ?? "Not created"}</dd></div></dl>
               <div className="focus-routing"><div><span>CURRENT STAGE</span><strong>{featuredState.stage}</strong></div><ArrowRight size={20} aria-hidden="true" /><div><span>WAITING ON</span><strong>{featuredState.waitingOn}</strong></div></div>
@@ -349,6 +374,8 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
             </div>
             <footer><span><Target size={17} aria-hidden="true" />Suggested label</span><strong>3R vehicle-return risk</strong><p>Risk label only · not a 3R eligibility decision</p></footer>
           </section>}
+
+          {approvalTask?.agent && <InvestigationApprovalCard owner={approvalTask.owner} agent={approvalTask.agent} status={approvals[approvalTask.key]} onDecision={(status) => onApproval(approvalTask.key, status)} onView={() => onResult(approvalTask.agent!.id)} />}
 
           <section className="panel pending-panel domain-cases">
             <div className="panel-heading domain-panel-heading"><span className={`domain-heading-icon ${activeDomain.tone}`}><DomainIcon tone={activeDomain.tone} /></span><div><p className="eyebrow">{activeDomain.name.toUpperCase()}</p><h2>{featuredItem ? "Other active work" : "Active work"}</h2><p>{activeDomain.description}</p></div><dl><div><dt>Pending</dt><dd>{activeDomain.pending}</dd></div><div><dt>In progress</dt><dd>{activeDomain.inProgress}</dd></div></dl><span className="count-badge">{queueItems.length} active</span></div>
@@ -368,6 +395,18 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
         </section>
       </div>
     </main>
+  );
+}
+
+function InvestigationApprovalCard({ owner, agent, status, onDecision, onView }: { owner: "A6" | "A3"; agent: ReviewAgent; status: InvestigationApprovalStatus; onDecision: (status: InvestigationApprovalStatus) => void; onView: () => void }) {
+  const approved = status === "approved";
+  const changesRequested = status === "changes_requested";
+  return (
+    <section className={`approval-workbench-card ${approved ? "approved" : changesRequested ? "changes" : "pending"}`} aria-labelledby={`${owner}-approval-title`}>
+      <header><span className={`approval-owner ${owner.toLowerCase()}`}>{owner}</span><div><p>INVESTIGATION APPROVAL</p><h2 id={`${owner}-approval-title`}>{agent.name}</h2><span>{agent.purpose}</span></div><b>{approved ? "Approved" : changesRequested ? "Changes requested" : "Approval required"}</b></header>
+      <div className="approval-summary"><div><span>AGENT CONCLUSION</span><p>{agent.resultSummary}</p></div><button className="text-button button-with-icon" onClick={onView}><Eye size={16} aria-hidden="true" />View result &amp; sources</button></div>
+      <footer><span><LockKeyOpen size={17} aria-hidden="true" />Current user has approval access · no role switch required</span><div><button className="secondary-button wide" onClick={() => onDecision("changes_requested")}>Request changes</button><button className="primary-button wide button-with-icon" onClick={() => onDecision("approved")}><CheckCircle size={18} weight="fill" />{approved ? "Approved" : "Approve result"}</button></div></footer>
+    </section>
   );
 }
 
@@ -604,7 +643,7 @@ function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench 
 }
 
 function DealerCaseSetupMockModal({ existing, onCancel, onSubmit }: { existing: DealerSubmission | null; onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
-  const [summary, setSummary] = useState(existing?.contactSummary ?? "Dealer confirmed the customer still requests a vehicle return after discussing repair and goodwill options. The repeated concern and repair history are recorded in the 3R Case.");
+  const [summary, setSummary] = useState(existing?.contactSummary ?? "Dealer confirmed the customer still requests a vehicle return after discussing repair and goodwill options. One repair remained open for 36 days while waiting for a power-control module; the repeated concern and full repair history are recorded in the 3R Case.");
   const [includedFiles, setIncludedFiles] = useState(() => dealerSetupAttachments.map((attachment) => existing ? existing.attachments.some((item) => item.name === attachment.name) : true));
   const selectedAttachments = dealerSetupAttachments.filter((_, index) => includedFiles[index]);
   return (
@@ -837,8 +876,8 @@ function ReviewAgentIcon({ category, size = 22 }: { category: ReviewAgent["categ
   return <Database size={size} />;
 }
 
-function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, onRunComplete, onReplan, onResult, onNext }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; dealerSubmission: DealerSubmission | null; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResult: (agentId: string) => void; onNext: () => void }) {
-  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["warranty"]));
+function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, onAccess, onRunComplete, onReplan, onResetApprovals, onResult, onNext, onWorkbench }: { state: ReviewState; agents: ReviewAgent[]; setAgents: React.Dispatch<React.SetStateAction<ReviewAgent[]>>; dealerSubmission: DealerSubmission | null; approvals: InvestigationApprovals; onAccess: () => void; onRunComplete: () => void; onReplan: () => void; onResetApprovals: () => void; onResult: (agentId: string) => void; onNext: () => void; onWorkbench: () => void }) {
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set(["technical", "parts"]));
   const [contextOpen, setContextOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [runCursor, setRunCursor] = useState(0);
@@ -890,15 +929,17 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
   const replanAgents = () => {
     setRunCursor(0);
     setRunPhase("request");
+    onResetApprovals();
     onReplan();
   };
 
   const activeAgent = agents[runCursor];
+  const approvalsComplete = approvals.a6 === "approved" && approvals.a3 === "approved";
   const runMessage = runCursor >= agents.length ? "All results are back. The Process Agent is preparing the report." : runPhase === "request" ? `Sending a task to ${activeAgent?.name}…` : runPhase === "working" ? `${activeAgent?.name} is checking its source…` : `${activeAgent?.name} is sending the result to the Process Agent…`;
 
   return (
     <section className="screen-panel review-plan-screen">
-      <div className="screen-heading"><div><p className="section-kicker">{reviewProcessAgentName.toUpperCase()}</p><h2>{state === "results" ? "Review Results" : state === "running" ? "Running Review" : "Review Plan"}</h2></div></div>
+      <div className="screen-heading"><div><p className="section-kicker">{reviewProcessAgentName.toUpperCase()}</p><h2>{state === "results" ? "Investigation Results" : state === "running" ? "Running Investigation" : "Investigation Plan"}</h2><p>Agent selection and tasks remain configurable. Approval is handled from the relevant Workbench domain.</p></div></div>
 
       {state === "plan" && <section className="plan-rationale">
         <div className="rationale-icon"><MagicWand size={22} /></div>
@@ -915,6 +956,8 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
           </div>
         </section>}
       </section>}
+
+      {state === "plan" && <section className="investigation-triggers" aria-label="AI investigation triggers"><header><MagicWand size={20} aria-hidden="true" /><div><span>AI-RECOMMENDED PLAN</span><h3>Configured from Complaint and Dealer case signals</h3></div></header><div><article><b>A6 · Mandatory</b><strong>Quality issue and Dealer repair responsibility</strong><span>Required for every 3R investigation.</span></article><article><b>A3 · Triggered</b><strong>Parts order and arrival timeline</strong><span>Customer reports a repair over 30 days; Dealer supplied a parts timeline.</span></article><article><b>A8 · Triggered</b><strong>Repeated repair history</strong><span>Complaint reports five repairs for the same issue.</span></article></div></section>}
 
       {(state === "running" || state === "results") && (
         <section className={`agent-network ${state}`} aria-label={`${reviewProcessAgentName} orchestration`}>
@@ -945,7 +988,9 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
         </section>
       )}
 
-      {state === "plan" && <div className="action-plan-heading"><div><p>REVIEW PLAN</p><h3>{agents.length} review steps</h3><span>Open a step to check or edit its task.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
+      {state === "results" && <section className="investigation-approval-gate"><header><ShieldCheck size={21} aria-hidden="true" /><div><span>HUMAN APPROVAL GATE</span><h3>{approvalsComplete ? "Required approvals completed" : "Return to Workbench for A6 and A3 approvals"}</h3></div></header><div><article><span>A6 · Technical Service</span><strong>{approvals.a6 === "approved" ? "Approved" : approvals.a6 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article><article><span>A3 · Warranty</span><strong>{approvals.a3 === "approved" ? "Approved" : approvals.a3 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article></div><p>Current user has both approval permissions. No role switching is required.</p></section>}
+
+      {state === "plan" && <div className="action-plan-heading"><div><p>INVESTIGATION PLAN</p><h3>{agents.length} configured Agent steps</h3><span>Open a step to rename the Agent or edit its query instruction.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
       {state === "plan" && addOpen && <section className="add-agent-panel"><div><strong>Add an Agent type</strong><span>Add it to the plan, then define its business name and task.</span></div>{optionalReviewAgents.map((agent) => <button key={agent.id} onClick={() => addAgent(agent)}><span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span><strong>{agent.category === "ocr" ? "OCR Agent" : "Data Agent"}<small>{agent.category === "ocr" ? "Extract structured fields from documents" : "Define an additional data query"}</small></strong><Plus size={18} /></button>)}</section>}
 
@@ -967,7 +1012,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, onAccess, on
         })}
       </div>}
 
-      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the plan if needed, then run the review." : "The recommendation is ready for human review."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Check Access &amp; Run</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button><button className="primary-button wide button-with-icon" onClick={onNext}>Review Recommendation<ArrowRight size={18} /></button></div>}</div>}
+      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the configuration if needed, then run the investigation." : approvalsComplete ? "A6 and A3 approvals are complete." : "Investigation results cannot enter Decision before both approvals."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Confirm &amp; Run Investigation</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button>{approvalsComplete ? <button className="primary-button wide button-with-icon" onClick={onNext}>Review Recommendation<ArrowRight size={18} /></button> : <button className="primary-button wide button-with-icon" onClick={onWorkbench}>Return to Workbench for Approvals<ArrowRight size={18} /></button>}</div>}</div>}
     </section>
   );
 }
@@ -1103,7 +1148,7 @@ function ExecutionScreen({ instruction, completed, onComplete, onWorkbench }: { 
 function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onCancel: () => void; onAllow: () => void }) {
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Check Agent Access</h2><p className="modal-intro">The Process Agent will run the selected Agents for this case.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name}</strong><RoleBadge>{agent.role}</RoleBadge></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><Clock size={18} aria-hidden="true" />{caseData.access.duration}</span></div><p>Access ends when this review is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Confirm Investigation Access</h2><p className="modal-intro">The current Demo user can run every configured Agent and approve both A6 and A3 results. No role switch is required.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name}</strong><RoleBadge>{agent.role}</RoleBadge></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><CheckCircle size={18} aria-hidden="true" />A6 + A3 approval access</span></div><p>Agent access ends when this investigation is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
     </div>
   );
 }

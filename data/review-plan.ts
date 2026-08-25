@@ -37,18 +37,18 @@ export type ReviewAgent = {
 
 export const reviewPlanContext = {
   recommendation:
-    "Verify scope, test every relevant Buyback condition, trace the fault and parts timeline, then compare approved cases.",
+    "Run the mandatory A6 quality assessment and add A3 because both the complaint and Dealer case information indicate a repair duration over 30 days.",
   complaintSummary:
-    "The customer reports recurring loss of driving power after five repair visits for the same issue and requests a vehicle return under the 3R policy. Customer Care routed the request to the 3R Buyback Process Agent; eligibility has not yet been decided.",
+    "The customer reports recurring loss of driving power, five repair visits for the same issue and one repair lasting more than 30 days while waiting for a part. The customer requests to return the vehicle; 3R eligibility has not yet been decided.",
 };
 
 export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "warranty",
-    name: "Warranty Agent",
+    name: "A8 Repair History Agent",
     role: "Data Agent",
     category: "warranty",
-    purpose: "Verify coverage and repair history",
+    purpose: "Verify repeated repairs for the same issue",
     requirement: "Get the repair and warranty records for this VIN. Verify the 3R period, confirm that all records concern the same quality issue, and determine whether the repair count exceeds four.",
     resultSummary: "Coverage is active. Five completed repair attempts are verified for the same loss-of-power quality issue, so the more-than-four-repairs condition is met.",
     decisionImpact: "Provides the qualifying 3R condition used by the recommendation: the same quality issue was repaired five times and remains unresolved.",
@@ -66,10 +66,10 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   },
   {
     id: "technical",
-    name: "Technical Service Agent",
+    name: "A6 Technical Quality Agent",
     role: "Data Agent",
     category: "technical",
-    purpose: "Determine known quality issue and dealer repair negligence",
+    purpose: "Mandatory quality issue and Dealer responsibility check",
     requirement: "Get the latest Technical Service and TSARA findings. Determine whether the symptom matches a known quality issue and whether the dealer failed to follow the required diagnosis or repair procedure.",
     resultSummary: "The symptom matches a known product quality issue. The dealer followed the prescribed diagnosis and repair procedure; no dealer repair negligence was identified.",
     decisionImpact: "Supports Buyback on the product-quality pathway. Dealer contribution in the proposal is a commercial allocation, not a finding of repair negligence.",
@@ -78,6 +78,24 @@ export const recommendedReviewAgents: ReviewAgent[] = [
       title: "Technical records",
       records: [
         { id: "TS-DEMO-204", date: "08 May 2026", facts: ["Known product quality issue matched", "Required diagnostic steps completed", "Repair procedure followed", "No dealer repair negligence identified"], relevance: "Establishes the product-quality pathway and separates product responsibility from dealer repair conduct.", rawPreview: "Technical Service review compares the observed symptom with known quality patterns and checks the dealer's diagnosis and repair steps." },
+      ],
+    },
+  },
+  {
+    id: "parts",
+    name: "A3 Parts Timeline Agent",
+    role: "Data Agent",
+    category: "parts",
+    purpose: "Check the part order and arrival time behind the 30+ day repair",
+    requirement: "Query the parts orders linked to the repair that exceeded 30 days. Compare order and arrival timestamps, identify the delayed part, and calculate the exact waiting duration.",
+    resultSummary: "The power-control module was ordered on 03 Jan and arrived on 08 Feb. The 36-day delivery time exceeded the 30-day trigger by 6 days.",
+    decisionImpact: "Confirms that the reported repair duration over 30 days was linked to a delayed parts order and requires A3 approval.",
+    sources: {
+      type: "data",
+      title: "A3 parts order timeline",
+      records: [
+        { id: "PO-DEMO-341", date: "Ordered 03 Jan", facts: ["Power-control module", "Arrived 08 Feb", "36-day delivery"], relevance: "Confirms the part behind the over-30-day repair and calculates the delay.", rawPreview: "CCO-linked parts timestamps show an order on 03 Jan and receipt on 08 Feb." },
+        { id: "PO-DEMO-407", date: "Ordered 12 Feb", facts: ["Control-module harness", "Arrived 24 Feb", "12-day delivery"], relevance: "Provides a normal-duration comparison record.", rawPreview: "Parts timestamps show a 12-day order-to-arrival interval." },
       ],
     },
   },
@@ -103,25 +121,6 @@ export const recommendedReviewAgents: ReviewAgent[] = [
 ];
 
 export const optionalReviewAgents: ReviewAgent[] = [
-  {
-    id: "data-custom",
-    name: "New Data Agent",
-    role: "Data Agent",
-    category: "parts",
-    purpose: "Check whether key parts took over 30 days to arrive",
-    requirement: "Check the parts records linked to these repairs. Compare order and arrival dates. Flag any key part that took more than 30 days.",
-    resultSummary: "The power-control module took 36 days to arrive, 6 days over the limit.",
-    decisionImpact: "Adds context about parts supply for the final decision.",
-    sources: {
-      type: "data",
-      title: "Parts delivery timeline",
-      records: [
-        { id: "PO-88341", date: "Ordered 03 Jan", facts: ["Power control module", "Arrived 08 Feb", "36-day delivery"], relevance: "Confirms the critical part exceeded the 30-day arrival threshold.", rawPreview: "Parts order and receipt timestamps show a 36-day delivery interval." },
-        { id: "PO-92407", date: "Ordered 12 Feb", facts: ["Control module harness", "Arrived 24 Feb", "12-day delivery"], relevance: "Provides the comparison record for a normal delivery interval.", rawPreview: "Parts order and receipt timestamps show a 12-day delivery interval." },
-      ],
-    },
-    addedBy: "Human",
-  },
   {
     id: "ocr-custom",
     name: "New OCR Agent",
