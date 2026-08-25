@@ -20,7 +20,7 @@
   "process": "Customer Complaints & Quality Handling",
   "complaint": {
     "callDuration": "03:42",
-    "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I want to return the vehicle under the 3R policy.",
+    "transcript": "The vehicle lost power again after several repair attempts. The issue remains unresolved and affects normal use. I want to return the vehicle.",
     "scanSource": "Customer letter",
     "scanReference": "DEMO-LETTER-0096",
     "scanSummary": "Written complaint records repeated power loss, five repair visits for the same issue and a formal vehicle-return request."
