@@ -272,6 +272,17 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
   const [selectedDomain, setSelectedDomain] = useState(routedDomain ?? "Customer Care");
   const items = workbenchData.workItems.map((item) => item.caseId === caseData.id && routedDomain ? { ...item, domain: routedDomain, status: "Human-rerouted" } : item).filter((item) => item.domain === selectedDomain);
   const activeDomain = workbenchData.domains.find((domain) => domain.name === selectedDomain) ?? workbenchData.domains[0];
+  const featuredItem = items.find((item) => item.caseId === caseData.id);
+  const queueItems = items.filter((item) => item.caseId !== caseData.id);
+  const waitingForDealer = Boolean(featuredItem) && ccoCaseCreated && !dealerSubmission && !completed;
+  const reviewReady = Boolean(featuredItem) && Boolean(dealerSubmission) && !completed;
+  const featuredState = completed
+    ? { title: "View completed case", description: "The current Demo flow is complete and its execution receipt is available.", stage: "Completed", waitingOn: "No blocker", status: "Completed", action: "View", handler: onOpen }
+    : reviewReady
+      ? { title: "Review dealer update", description: "The Dealer has returned an offline negotiation update. Continue from the Workbench to review the next process decision.", stage: "Dealer Negotiation", waitingOn: "Customer Care · A7", status: "Action required", action: "Review update", handler: onOpen }
+      : waitingForDealer
+        ? { title: "Dealer negotiation in progress", description: "The CCO Complaint is paused for offline Dealer negotiation. The Workbench resumes only after the Dealer outcome arrives.", stage: "Dealer Negotiation", waitingOn: "Dealer", status: "Waiting externally", action: "Mock dealer update", handler: onDealerMock }
+        : { title: "Review AI complaint label", description: "AI identified a complaint with a possible 3R vehicle-return risk. Review the transcript and confirm the label before creating any CCO record.", stage: "Complaint Intake", waitingOn: "Customer Care · A7", status: "Action required", action: "Review AI suggestion", handler: onOpen };
   return (
     <main className="app-shell">
       <ProductHeader />
@@ -286,26 +297,35 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
         </aside>
         <section className="content workbench-content">
           <div className="page-heading">
-            <div><p className="eyebrow">AFS PROCESS MANAGEMENT</p><h1>AFS Process Workbench</h1><p>One place to monitor and operate aftersales processes across business domains</p></div>
+            <div><p className="eyebrow">AFS PROCESS MANAGEMENT</p><h1>AFS Process Workbench</h1><p>Prioritized by current owner, blocking state and the next action required</p></div>
             <span className="workbench-live"><span />Live process activity</span>
           </div>
           <div className="metrics" aria-label="AFS work summary">
             {workbenchData.metrics.map((metric) => <article key={metric.label}><span>{metric.label}</span><strong>{metric.label === "Completed today" && completed ? metric.value + 1 : metric.value}</strong></article>)}
           </div>
+          {featuredItem && <section className="workbench-focus" aria-labelledby="next-action-title">
+            <header><span className="focus-icon"><Sparkle size={24} weight="fill" aria-hidden="true" /></span><div><p>MY NEXT ACTION</p><h2 id="next-action-title">{featuredState.title}</h2><span>{featuredState.description}</span></div><b className={`focus-status ${waitingForDealer ? "waiting" : completed ? "ready" : "action"}`}>{featuredState.status}</b></header>
+            <div className="focus-body">
+              <dl className="focus-records"><div><dt>Call ID</dt><dd>{featuredItem.callId}</dd></div><div><dt>Complaint ID</dt><dd>{ccoCaseCreated ? "CCO-CMP-2026-0096" : "Not created"}</dd></div><div><dt>3R Case ID</dt><dd>Not created</dd></div></dl>
+              <div className="focus-routing"><div><span>CURRENT STAGE</span><strong>{featuredState.stage}</strong></div><ArrowRight size={20} aria-hidden="true" /><div><span>WAITING ON</span><strong>{featuredState.waitingOn}</strong></div></div>
+              <button className="primary-button focus-action button-with-icon" onClick={featuredState.handler}>{featuredState.action}<ArrowRight size={18} aria-hidden="true" /></button>
+            </div>
+            <footer><span><Target size={17} aria-hidden="true" />Suggested label</span><strong>3R vehicle-return risk</strong><p>Risk label only · not a 3R eligibility decision</p></footer>
+          </section>}
+
           <section className="panel pending-panel domain-cases">
-            <div className="panel-heading domain-panel-heading"><span className={`domain-heading-icon ${activeDomain.tone}`}><DomainIcon tone={activeDomain.tone} /></span><div><p className="eyebrow">{activeDomain.name.toUpperCase()}</p><h2>Active cases</h2><p>{activeDomain.description}</p></div><dl><div><dt>Pending</dt><dd>{activeDomain.pending}</dd></div><div><dt>In progress</dt><dd>{activeDomain.inProgress}</dd></div></dl><span className="count-badge">{items.length} visible</span></div>
-            <div className="work-table" role="table" aria-label={`${selectedDomain} active cases`}>
-              <div className="work-row table-header" role="row"><span>Process</span><span>Case</span><span>Trigger</span><span>Detected intent</span><span>Status</span><span>Action</span></div>
-              {items.map((item) => {
-                const isDemo = item.caseId === caseData.id;
-                const waitingForDealer = isDemo && ccoCaseCreated && !dealerSubmission && !completed;
-                const reviewReady = isDemo && Boolean(dealerSubmission) && !completed;
-                const status = completed ? "Completed" : reviewReady ? "REVIEW_READY" : waitingForDealer ? "WAITING_DEALER_EVIDENCE" : item.status;
-                const actionLabel = completed ? "View" : reviewReady ? "Open Review" : waitingForDealer ? "Mock Dealer Submit" : "Open";
-                const action = waitingForDealer ? onDealerMock : onOpen;
-                return <div className={`work-row ${isDemo ? "featured" : ""}`} role="row" key={item.caseId}><strong>{item.process}{isDemo && <small className="ai-created-label"><Sparkle size={13} weight="fill" />{ccoCaseCreated ? "CCO 3R Case created" : "AI-created from call"}</small>}</strong><span>{isDemo && !ccoCaseCreated ? "Pending route" : item.caseId}</span><span>{item.trigger}</span><span>{item.intent}</span><span><b className={`${isDemo ? "case-status new" : "case-status"} ${waitingForDealer ? "waiting" : ""} ${reviewReady ? "ready" : ""}`}>{isDemo ? status : item.status}</b></span><span><button className={isDemo ? waitingForDealer ? "secondary-button" : "primary-button" : "text-button"} onClick={isDemo ? action : undefined} disabled={!isDemo}>{actionLabel}</button></span></div>;
-              })}
-              {items.length === 0 && <div className="domain-empty"><CheckCircle size={24} /><strong>No active cases in this domain</strong><span>Select another process domain.</span></div>}
+            <div className="panel-heading domain-panel-heading"><span className={`domain-heading-icon ${activeDomain.tone}`}><DomainIcon tone={activeDomain.tone} /></span><div><p className="eyebrow">{activeDomain.name.toUpperCase()}</p><h2>{featuredItem ? "Other active work" : "Active work"}</h2><p>{activeDomain.description}</p></div><dl><div><dt>Pending</dt><dd>{activeDomain.pending}</dd></div><div><dt>In progress</dt><dd>{activeDomain.inProgress}</dd></div></dl><span className="count-badge">{queueItems.length} active</span></div>
+            <div className="work-table" role="table" aria-label={`${selectedDomain} active work`}>
+              <div className="work-row table-header" role="row"><span>Work item</span><span>Business record</span><span>Current stage</span><span>Waiting on</span><span>Status</span><span>Next action</span></div>
+              {queueItems.map((item) => <div className="work-row" role="row" key={item.caseId}>
+                <strong>{item.process}<small>{item.trigger} · {item.intent}</small></strong>
+                <span className="record-reference"><small>{item.recordType}</small><b>{item.recordId}</b></span>
+                <span className="work-stage">{item.stage}</span>
+                <span className="waiting-owner"><Hourglass size={16} aria-hidden="true" />{item.waitingOn}</span>
+                <span><b className="case-status">{item.status}</b></span>
+                <span><button className="text-button" disabled>{item.nextAction}</button></span>
+              </div>)}
+              {queueItems.length === 0 && <div className="domain-empty"><CheckCircle size={24} /><strong>No other active work in this domain</strong><span>Your priority task is shown above.</span></div>}
             </div>
           </section>
         </section>
@@ -879,9 +899,9 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
             <div className="solution-section-heading"><div><span>COST ALLOCATION</span><h4 id="allocation-title">Edit each party&apos;s contribution</h4></div><small>Humanity Care total · {formatCny(calculated.humanityCareCost)}</small></div>
             <div className="allocation-editor" role="table" aria-label="Editable Buyback cost allocation by party">
               <div className="allocation-edit-row allocation-edit-head" role="row"><span role="columnheader">Party</span><span role="columnheader">Vehicle</span><span role="columnheader">Humanity Care</span><span role="columnheader">Other</span><span role="columnheader">Calculated Total</span></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">Customer Cover</strong><CurrencyInput compact id="customer-cover-vehicle" label="Customer Cover - Vehicle" value={calculated.customerCoverVehicle} onChange={(value) => updateAmount("customerCoverVehicle", value)} /><CurrencyInput compact id="customer-cover-humanity" label="Customer Cover - Humanity Care" value={calculated.customerCoverHumanityCare} onChange={(value) => updateAmount("customerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.customerCover)}</b></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">Dealer Cover</strong><CurrencyInput compact id="dealer-cover-vehicle" label="Dealer Cover - Vehicle" value={calculated.dealerCoverVehicle} onChange={(value) => updateAmount("dealerCoverVehicle", value)} /><CurrencyInput compact id="dealer-cover-humanity" label="Dealer Cover - Humanity Care" value={calculated.dealerCoverHumanityCare} onChange={(value) => updateAmount("dealerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.dealerCover)}</b></div>
-              <div className="allocation-edit-row" role="row"><strong role="rowheader">BMW Cover</strong><CurrencyInput compact id="bmw-cover-vehicle" label="BMW Cover - Vehicle" value={calculated.bmwCoverVehicle} onChange={(value) => updateAmount("bmwCoverVehicle", value)} /><CurrencyInput compact id="bmw-cover-humanity" label="BMW Cover - Humanity Care" value={calculated.bmwCoverHumanityCare} onChange={(value) => updateAmount("bmwCoverHumanityCare", value)} /><CurrencyInput compact id="bmw-cover-other" label="BMW Cover - Other" value={calculated.bmwCoverOther} onChange={(value) => updateAmount("bmwCoverOther", value)} /><b>{formatCny(calculated.bmwTotalCover)}</b></div>
+              <div className="allocation-edit-row" role="row"><strong>Customer Cover</strong><CurrencyInput compact id="customer-cover-vehicle" label="Customer Cover - Vehicle" value={calculated.customerCoverVehicle} onChange={(value) => updateAmount("customerCoverVehicle", value)} /><CurrencyInput compact id="customer-cover-humanity" label="Customer Cover - Humanity Care" value={calculated.customerCoverHumanityCare} onChange={(value) => updateAmount("customerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.customerCover)}</b></div>
+              <div className="allocation-edit-row" role="row"><strong>Dealer Cover</strong><CurrencyInput compact id="dealer-cover-vehicle" label="Dealer Cover - Vehicle" value={calculated.dealerCoverVehicle} onChange={(value) => updateAmount("dealerCoverVehicle", value)} /><CurrencyInput compact id="dealer-cover-humanity" label="Dealer Cover - Humanity Care" value={calculated.dealerCoverHumanityCare} onChange={(value) => updateAmount("dealerCoverHumanityCare", value)} /><span className="not-applicable">—</span><b>{formatCny(calculated.dealerCover)}</b></div>
+              <div className="allocation-edit-row" role="row"><strong>BMW Cover</strong><CurrencyInput compact id="bmw-cover-vehicle" label="BMW Cover - Vehicle" value={calculated.bmwCoverVehicle} onChange={(value) => updateAmount("bmwCoverVehicle", value)} /><CurrencyInput compact id="bmw-cover-humanity" label="BMW Cover - Humanity Care" value={calculated.bmwCoverHumanityCare} onChange={(value) => updateAmount("bmwCoverHumanityCare", value)} /><CurrencyInput compact id="bmw-cover-other" label="BMW Cover - Other" value={calculated.bmwCoverOther} onChange={(value) => updateAmount("bmwCoverOther", value)} /><b>{formatCny(calculated.bmwTotalCover)}</b></div>
             </div>
             <div className={`allocation-reconciliation ${allocationBalanced ? "balanced" : "mismatch"}`} role="status"><span>{allocationBalanced ? <CheckCircle size={18} weight="fill" /> : <WarningCircle size={18} weight="fill" />}{allocationBalanced ? "Vehicle allocation is balanced" : "Vehicle allocation needs adjustment"}</span><strong>{formatCny(allocatedVehicleCost)} allocated / {formatCny(calculated.vehicleCost)} cost loss</strong></div>
           </section>
