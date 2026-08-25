@@ -64,6 +64,12 @@ type DealerSubmission = {
   submittedAt: string;
   attachments: DealerAttachment[];
 };
+type DealerNegotiationUpdate = {
+  outcome: "settled" | "still_requests_return";
+  summary: string;
+  updatedAt: string;
+};
+type ScopeCheckResult = "within" | "outside";
 type BuybackSolution = typeof settlementRecommendation.solution;
 type EditableAmountKey =
   | "actualVehiclePrice"
@@ -78,15 +84,9 @@ type EditableAmountKey =
   | "bmwCoverHumanityCare"
   | "bmwCoverOther";
 
-const steps = ["Intake", "Route", "Dealer Negotiation", "Review", "Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Negotiation", "3R Scope Check", "3R Case Setup", "Review", "Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
 const complaintId = "CCO-CMP-2026-0096";
-const dealerEvidenceAttachments: DealerAttachment[] = [
-  { name: "Repair orders.pdf", type: "PDF", detail: "5 repair orders · same-issue history" },
-  { name: "TSARA diagnosis report.pdf", type: "PDF", detail: "Technical finding · 20 May 2026" },
-  { name: "Parts order timeline.xlsx", type: "XLSX", detail: "Order and arrival dates" },
-  { name: "Customer contact record.pdf", type: "PDF", detail: "Dealer communication record" },
-];
 
 const ccoCreationActions = [
   { title: "Freeze the approved route", detail: "The Router Agent records the human instruction and the approved 3R vehicle-return risk label." },
@@ -148,7 +148,7 @@ export default function ProcessApp() {
   const [stage, setStage] = useState(1);
   const [reviewState, setReviewState] = useState<ReviewState>("plan");
   const [accessOpen, setAccessOpen] = useState(false);
-  const [accessGranted, setAccessGranted] = useState(false);
+  const [, setAccessGranted] = useState(false);
   const [resultAgentId, setResultAgentId] = useState<string | null>(null);
   const [source, setSource] = useState<ComplaintSource>("call");
   const [playing, setPlaying] = useState(false);
@@ -158,7 +158,9 @@ export default function ProcessApp() {
   const [routeExecutionStarted, setRouteExecutionStarted] = useState(false);
   const [ccoCaseCreated, setCcoCaseCreated] = useState(false);
   const [dealerMockOpen, setDealerMockOpen] = useState(false);
-  const [dealerSubmission, setDealerSubmission] = useState<DealerSubmission | null>(null);
+  const [dealerNegotiation, setDealerNegotiation] = useState<DealerNegotiationUpdate | null>(null);
+  const [scopeCheckResult, setScopeCheckResult] = useState<ScopeCheckResult | null>(null);
+  const [dealerSubmission] = useState<DealerSubmission | null>(null);
   const [routedDomain, setRoutedDomain] = useState<string | null>(null);
   const [buybackDraft, setBuybackDraft] = useState<BuybackSolution>(() => calculateBuybackSolution({ ...settlementRecommendation.solution }));
   const [decisionInstruction, setDecisionInstruction] = useState(createDecisionInstruction);
@@ -166,7 +168,7 @@ export default function ProcessApp() {
 
   const openCase = () => {
     setView("case");
-    setStage(dealerSubmission ? 4 : 1);
+    setStage(scopeCheckResult ? 4 : dealerNegotiation ? 3 : 1);
     setReviewState("plan");
     setAccessGranted(false);
     setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
@@ -188,27 +190,27 @@ export default function ProcessApp() {
 
   const completeCase = () => {
     setCaseCompleted(false);
-    setStage(6);
+    setStage(8);
   };
 
   const timeline = useMemo(() => {
     const events = [
       { label: "Complaint received", done: stage > 1 || caseCompleted },
       { label: "Route executed & CCO Complaint created", done: routeConfirmed && ccoCaseCreated },
-      { label: "Dealer negotiation update received", done: Boolean(dealerSubmission) },
-      { label: "Review plan prepared", done: stage > 4 || reviewState !== "plan" },
-      { label: "Case access allowed", done: accessGranted },
-      { label: "Agent review completed", done: reviewState === "results" || stage > 4 },
-      { label: "Recommendation prepared", done: stage >= 5 },
+      { label: "Dealer negotiation completed", done: Boolean(dealerNegotiation) },
+      { label: "3R effective scope checked", done: Boolean(scopeCheckResult) },
+      { label: "3R Case setup completed", done: Boolean(dealerSubmission) },
+      { label: "Agent review completed", done: reviewState === "results" || stage > 6 },
+      { label: "Recommendation prepared", done: stage >= 7 },
       { label: "Case completed", done: caseCompleted },
     ];
     const firstPending = events.findIndex((event) => !event.done);
     return events.map((event, index) => ({ ...event, active: firstPending === index }));
-  }, [accessGranted, caseCompleted, ccoCaseCreated, dealerSubmission, reviewState, routeConfirmed, stage]);
+  }, [caseCompleted, ccoCaseCreated, dealerNegotiation, dealerSubmission, reviewState, routeConfirmed, scopeCheckResult, stage]);
 
   if (view === "workbench") return <>
-    <Workbench onOpen={openCase} onDealerMock={() => setDealerMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerSubmission={dealerSubmission} />
-    {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
+    <Workbench onOpen={openCase} onDealerMock={() => setDealerMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerNegotiation={dealerNegotiation} scopeCheckResult={scopeCheckResult} />
+    {dealerMockOpen && <DealerNegotiationMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(update) => { setDealerNegotiation(update); setDealerMockOpen(false); }} />}
   </>;
 
   return (
@@ -217,14 +219,16 @@ export default function ProcessApp() {
       <StageStepper stage={stage} timeline={timeline} onSelect={(next) => next <= stage && setStage(next)} />
       <section className="case-layout">
         <div className="case-main">
-          {stage <= 2 ? <ComplaintContext complaintCreated={ccoCaseCreated} stage={stage} /> : <CaseIdentity caseIdAvailable={ccoCaseCreated} stage={stage} />}
+          {stage <= 4 ? <ComplaintContext complaintCreated={ccoCaseCreated} stage={stage} /> : <CaseIdentity caseIdAvailable={ccoCaseCreated} stage={stage} />}
           {stage === 1 && (
             <IntakeScreen source={source} setSource={setSource} playing={playing} setPlaying={setPlaying} analyzed={intakeAnalyzed} setAnalyzed={setIntakeAnalyzed} onNext={() => setStage(2)} />
           )}
           {stage === 2 && !routeExecutionStarted && <RoutingDecisionScreen onConfirm={() => { setRouteConfirmed(true); setRouteExecutionStarted(true); }} onModify={(target) => { setRoutedDomain(target); backToWorkbench(); }} />}
           {stage === 2 && routeExecutionStarted && <CreateComplaintCaseExecution created={ccoCaseCreated} onCreated={() => setCcoCaseCreated(true)} onWorkbench={backToWorkbench} />}
-          {stage === 3 && <DealerEvidenceScreen submission={dealerSubmission} onOpenMock={() => setDealerMockOpen(true)} onContinue={() => setStage(4)} onWorkbench={backToWorkbench} />}
-          {stage === 4 && (
+          {stage === 3 && dealerNegotiation && <DealerNegotiationScreen update={dealerNegotiation} onContinue={() => setStage(4)} onWorkbench={backToWorkbench} />}
+          {stage === 4 && dealerNegotiation?.outcome === "still_requests_return" && <ScopeCheckScreen storedResult={scopeCheckResult} onFinish={(result) => { setScopeCheckResult(result); backToWorkbench(); }} />}
+          {stage === 5 && <DealerEvidenceScreen submission={dealerSubmission} onOpenMock={() => setDealerMockOpen(true)} onContinue={() => setStage(6)} onWorkbench={backToWorkbench} />}
+          {stage === 6 && (
             <ReviewScreen
               state={reviewState}
               agents={plannedAgents}
@@ -237,16 +241,16 @@ export default function ProcessApp() {
               }}
               dealerSubmission={dealerSubmission}
               onResult={setResultAgentId}
-              onNext={() => setStage(5)}
+              onNext={() => setStage(7)}
             />
           )}
-          {stage === 5 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(4)} onConfirm={completeCase} />}
-          {stage === 6 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
+          {stage === 7 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(6)} onConfirm={completeCase} />}
+          {stage === 8 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
-      {dealerMockOpen && <DealerMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerMockOpen(false); }} />}
-      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 5 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
+      {dealerMockOpen && <DealerNegotiationMockModal onCancel={() => setDealerMockOpen(false)} onSubmit={(update) => { setDealerNegotiation(update); setDealerMockOpen(false); }} />}
+      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 7 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
     </main>
   );
 }
@@ -270,27 +274,36 @@ function DomainIcon({ tone, size = 25 }: { tone: string; size?: number }) {
 }
 
 function ComplaintContext({ complaintCreated, stage }: { complaintCreated: boolean; stage: number }) {
+  const recordStatus = !complaintCreated ? "No CCO record has been created" : stage === 3 ? "Dealer negotiation update linked" : stage === 4 ? "3R process instance · BBP-2026-0096" : "Route execution completed";
   return (
     <section className="complaint-context" aria-labelledby="complaint-context-title">
       <span className="complaint-context-icon"><PhoneCall size={23} aria-hidden="true" /></span>
-      <div><span>{complaintCreated ? "CCO COMPLAINT" : stage === 1 ? "INBOUND CALL" : "ROUTE REVIEW"}</span><strong id="complaint-context-title">{complaintCreated ? complaintId : "Customer requests to return the vehicle"}</strong><small>{complaintCreated ? "Route execution completed" : "No CCO record has been created"}</small></div>
+      <div><span>{complaintCreated ? "CCO COMPLAINT" : stage === 1 ? "INBOUND CALL" : "ROUTE REVIEW"}</span><strong id="complaint-context-title">{complaintCreated ? complaintId : "Customer requests to return the vehicle"}</strong><small>{recordStatus}</small></div>
       <dl><div><dt>Call ID</dt><dd>CALL-DEMO-0096</dd></div><div><dt>Vehicle</dt><dd>{caseData.vehicle.model} · {caseData.vehicle.vin}</dd></div><div><dt>Customer wording</dt><dd>Return the vehicle</dd></div></dl>
     </section>
   );
 }
 
-function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreated, dealerSubmission }: { onOpen: () => void; onDealerMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerSubmission: DealerSubmission | null }) {
+function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreated, dealerNegotiation, scopeCheckResult }: { onOpen: () => void; onDealerMock: () => void; completed: boolean; routedDomain: string | null; ccoCaseCreated: boolean; dealerNegotiation: DealerNegotiationUpdate | null; scopeCheckResult: ScopeCheckResult | null }) {
   const [selectedDomain, setSelectedDomain] = useState(routedDomain ?? "Customer Care");
   const items = workbenchData.workItems.map((item) => item.caseId === caseData.id && routedDomain ? { ...item, domain: routedDomain, status: "Human-rerouted" } : item).filter((item) => item.domain === selectedDomain);
   const activeDomain = workbenchData.domains.find((domain) => domain.name === selectedDomain) ?? workbenchData.domains[0];
   const featuredItem = items.find((item) => item.caseId === caseData.id);
   const queueItems = items.filter((item) => item.caseId !== caseData.id);
-  const waitingForDealer = Boolean(featuredItem) && ccoCaseCreated && !dealerSubmission && !completed;
-  const reviewReady = Boolean(featuredItem) && Boolean(dealerSubmission) && !completed;
+  const waitingForDealer = Boolean(featuredItem) && ccoCaseCreated && !dealerNegotiation && !completed;
+  const dealerOutcomeReady = Boolean(featuredItem) && Boolean(dealerNegotiation) && !scopeCheckResult && !completed;
+  const scopeComplete = Boolean(featuredItem) && Boolean(scopeCheckResult) && !completed;
+  const resolvedByAgreement = dealerOutcomeReady && dealerNegotiation?.outcome === "settled";
   const featuredState = completed
     ? { title: "View completed case", description: "The current Demo flow is complete and its execution receipt is available.", stage: "Completed", waitingOn: "No blocker", status: "Completed", action: "View", handler: onOpen }
-    : reviewReady
-      ? { title: "Review dealer update", description: "The Dealer has returned an offline negotiation update. Continue from the Workbench to review the next process decision.", stage: "Dealer Negotiation", waitingOn: "Customer Care · A7", status: "Action required", action: "Review update", handler: onOpen }
+    : scopeComplete
+      ? scopeCheckResult === "within"
+        ? { title: "Dealer 3R Case creation required", description: "The vehicle is within the configured 3R effective scope. The next step must be completed manually by the Dealer in CCO.", stage: "3R Case Setup", waitingOn: "Dealer", status: "Waiting externally", action: "View scope result", handler: onOpen }
+        : { title: "Outside 3R effective scope", description: "The scope gate ended the 3R path. Converting the Complaint to another case type is outside this Demo.", stage: "Scope Check Complete", waitingOn: "No blocker", status: "Demo complete", action: "View result", handler: onOpen }
+      : dealerOutcomeReady
+        ? dealerNegotiation?.outcome === "settled"
+          ? { title: "Complaint closed after Dealer agreement", description: "The Dealer and customer reached an agreement. The Complaint path is complete and no 3R processing was started.", stage: "Dealer Negotiation Complete", waitingOn: "No blocker", status: "Demo complete", action: "View result", handler: onOpen }
+          : { title: "Review Dealer negotiation outcome", description: "The Dealer confirms that the customer still requests to return the vehicle. Review the update before triggering the 3R Process Agent.", stage: "Dealer Negotiation", waitingOn: "Customer Care · A7", status: "Action required", action: "Review outcome", handler: onOpen }
       : waitingForDealer
         ? { title: "Dealer negotiation in progress", description: "The CCO Complaint is paused for offline Dealer negotiation. The Workbench resumes only after the Dealer outcome arrives.", stage: "Dealer Negotiation", waitingOn: "Dealer", status: "Waiting externally", action: "Mock dealer update", handler: onDealerMock }
         : { title: "Review AI complaint label", description: "AI identified a complaint with a possible 3R vehicle-return risk. Review the transcript and confirm the label before creating any CCO record.", stage: "Complaint Intake", waitingOn: "Customer Care · A7", status: "Action required", action: "Review AI suggestion", handler: onOpen };
@@ -315,7 +328,7 @@ function Workbench({ onOpen, onDealerMock, completed, routedDomain, ccoCaseCreat
             {workbenchData.metrics.map((metric) => <article key={metric.label}><span>{metric.label}</span><strong>{metric.label === "Completed today" && completed ? metric.value + 1 : metric.value}</strong></article>)}
           </div>
           {featuredItem && <section className="workbench-focus" aria-labelledby="next-action-title">
-            <header><span className="focus-icon"><Sparkle size={24} weight="fill" aria-hidden="true" /></span><div><p>MY NEXT ACTION</p><h2 id="next-action-title">{featuredState.title}</h2><span>{featuredState.description}</span></div><b className={`focus-status ${waitingForDealer ? "waiting" : completed ? "ready" : "action"}`}>{featuredState.status}</b></header>
+            <header><span className="focus-icon"><Sparkle size={24} weight="fill" aria-hidden="true" /></span><div><p>MY NEXT ACTION</p><h2 id="next-action-title">{featuredState.title}</h2><span>{featuredState.description}</span></div><b className={`focus-status ${waitingForDealer || (scopeCheckResult === "within" && scopeComplete) ? "waiting" : completed || resolvedByAgreement || scopeCheckResult === "outside" ? "ready" : "action"}`}>{featuredState.status}</b></header>
             <div className="focus-body">
               <dl className="focus-records"><div><dt>Call ID</dt><dd>{featuredItem.callId}</dd></div><div><dt>Complaint ID</dt><dd>{ccoCaseCreated ? complaintId : "Not created"}</dd></div><div><dt>3R Case ID</dt><dd>Not created</dd></div></dl>
               <div className="focus-routing"><div><span>CURRENT STAGE</span><strong>{featuredState.stage}</strong></div><ArrowRight size={20} aria-hidden="true" /><div><span>WAITING ON</span><strong>{featuredState.waitingOn}</strong></div></div>
@@ -349,14 +362,16 @@ function StageStepper({ stage, timeline, onSelect }: { stage: number; timeline: 
   const stageStatuses = [
     timeline[0].done ? "Complaint captured" : "Current step",
     timeline[1].done ? "CCO Complaint created" : stage === 2 ? "Human gate / Complaint creation" : "Pending",
-    timeline[2].done ? "Submission received" : stage === 3 ? "Waiting externally" : "Pending",
-    timeline[5].done ? "Review completed" : timeline[4].done ? "Agents executing" : stage === 4 ? "Plan approval" : "Pending",
-    stage > 5 ? "Decision submitted" : stage === 5 ? "Human decision" : "Pending",
-    timeline[7].done ? "Case completed" : stage === 6 ? "Automation running" : "Pending",
+    timeline[2].done ? "Outcome received" : stage === 3 ? "Review outcome" : "Pending",
+    timeline[3].done ? "Scope checked" : stage === 4 ? "FRD + mileage" : "Pending",
+    timeline[4].done ? "Case data received" : stage === 5 ? "Waiting on Dealer" : "Pending",
+    timeline[5].done ? "Review completed" : stage === 6 ? "Plan and investigation" : "Pending",
+    timeline[6].done ? "Decision prepared" : stage === 7 ? "Human decision" : "Pending",
+    timeline[7].done ? "Case completed" : stage === 8 ? "Automation running" : "Pending",
   ];
   return (
     <nav className="stepper compact" aria-label="Case progress">
-      <div className="process-label"><span>{stage <= 2 ? "CUSTOMER COMPLAINT" : "3R CASE · BUYBACK"}</span><strong>{stage <= 2 ? "Intake and routing" : "Human-controlled case flow"}</strong></div>
+      <div className="process-label"><span>{stage <= 3 ? "CUSTOMER COMPLAINT" : "3R BUYBACK PROCESS"}</span><strong>{stage <= 2 ? "Intake and routing" : stage === 3 ? "Dealer negotiation" : "Human-controlled investigation"}</strong></div>
       {steps.map((label, index) => {
         const number = index + 1;
         return <button key={label} className={`step ${stage === number ? "active" : ""} ${stage > number ? "done" : ""}`} onClick={() => onSelect(number)} disabled={number > stage}><span>{stage > number ? <Check size={15} weight="bold" aria-hidden="true" /> : number}</span><b>{label}<small>{stageStatuses[index]}</small></b></button>;
@@ -464,6 +479,90 @@ function CreateComplaintCaseExecution({ created, onCreated, onWorkbench }: { cre
   );
 }
 
+function DealerNegotiationScreen({ update, onContinue, onWorkbench }: { update: DealerNegotiationUpdate; onContinue: () => void; onWorkbench: () => void }) {
+  const stillRequestsReturn = update.outcome === "still_requests_return";
+  return (
+    <section className="screen-panel dealer-negotiation-screen">
+      <div className="screen-heading"><div><p className="section-kicker">DEALER · OFFLINE ACTIVITY</p><h2>Dealer Negotiation Outcome</h2><p>The Workbench resumes only after the Dealer submits this external outcome.</p></div><span className="success-pill"><CheckCircle size={16} weight="fill" />Update received</span></div>
+      <section className="negotiation-record"><div className="cco-icon"><SquaresFour size={27} aria-hidden="true" /></div><div><span>CCO COMPLAINT</span><h3>{complaintId}</h3><p>AI label · <b>3R vehicle-return risk</b></p></div><strong>DealerNegotiationUpdated</strong></section>
+      <section className="offline-negotiation-map" aria-label="Dealer negotiated with the customer outside the Workbench"><div><Buildings size={37} aria-hidden="true" /><strong>Dealer</strong><span>Offline negotiation</span></div><i><ChatText size={18} aria-hidden="true" /></i><div><Headset size={37} aria-hidden="true" /><strong>Customer</strong><span>Confirms final request</span></div></section>
+      <section className={`negotiation-outcome ${stillRequestsReturn ? "continue" : "settled"}`}><span>{stillRequestsReturn ? <WarningCircle size={24} weight="fill" /> : <CheckCircle size={24} weight="fill" />}</span><div><small>DEALER OUTCOME · {update.updatedAt}</small><h3>{stillRequestsReturn ? "Customer still requests to return the vehicle" : "Agreement reached with the customer"}</h3><p>{update.summary}</p></div></section>
+      {stillRequestsReturn ? <section className="process-trigger-preview"><div className="robot-avatar planner"><Robot size={62} weight="duotone" /><span><FlowArrow size={18} weight="bold" /></span></div><div><span>NEXT PROCESS</span><h3>{reviewProcessAgentName}</h3><p>Starting the scope gate creates process instance <b>BBP-2026-0096</b> and links it to {complaintId}.</p></div><strong>Not started</strong></section> : <section className="negotiation-terminal"><CheckCircle size={25} weight="fill" /><div><strong>Complaint closed in CCO</strong><span>The agreed Complaint path is complete. No Process Agent, Data Agent or 3R Case was triggered.</span></div></section>}
+      <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={onWorkbench}><ArrowLeft size={18} />Return to Workbench</button>{stillRequestsReturn && <button className="primary-button wide button-with-icon" onClick={onContinue}>Start 3R Scope Check<ArrowRight size={18} /></button>}</div>
+    </section>
+  );
+}
+
+function DealerNegotiationMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (update: DealerNegotiationUpdate) => void }) {
+  const [outcome, setOutcome] = useState<DealerNegotiationUpdate["outcome"]>("still_requests_return");
+  const [summary, setSummary] = useState("Dealer discussed available repair and goodwill options with the customer. The customer declined and continues to request a vehicle return.");
+  const chooseOutcome = (next: DealerNegotiationUpdate["outcome"]) => {
+    setOutcome(next);
+    setSummary(next === "settled" ? "Dealer and customer reached an agreement on the existing Complaint. The customer no longer requests to return the vehicle." : "Dealer discussed available repair and goodwill options with the customer. The customer declined and continues to request a vehicle return.");
+  };
+  return (
+    <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+      <section className="modal negotiation-mock" role="dialog" aria-modal="true" aria-labelledby="negotiation-mock-title">
+        <div className="mock-banner"><Buildings size={21} aria-hidden="true" /><span>DEMO MOCK · DEALER OFFLINE UPDATE</span></div>
+        <h2 id="negotiation-mock-title">Submit negotiation outcome</h2>
+        <p className="modal-intro">This simulates the Dealer updating CCO after speaking with the customer. It does not send a message to the customer.</p>
+        <fieldset className="outcome-options"><legend>Negotiation result</legend><label className={outcome === "still_requests_return" ? "selected" : ""}><input type="radio" name="dealer-outcome" checked={outcome === "still_requests_return"} onChange={() => chooseOutcome("still_requests_return")} /><span><WarningCircle size={21} /><strong>Still requests return</strong><small>Trigger the 3R Buyback Process Agent after A7 review.</small></span></label><label className={outcome === "settled" ? "selected" : ""}><input type="radio" name="dealer-outcome" checked={outcome === "settled"} onChange={() => chooseOutcome("settled")} /><span><CheckCircle size={21} /><strong>Agreement reached</strong><small>Close the Complaint path without starting 3R processing.</small></span></label></fieldset>
+        <label><span>Dealer summary</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
+        <div className="event-preview"><code>DealerNegotiationUpdated</code><span>Workbench resumes only after submission</span></div>
+        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={summary.trim().length < 20} onClick={() => onSubmit({ outcome, summary, updatedAt: "25 Aug 2026 · 15:20" })}><CheckCircle size={18} />Submit update</button></div>
+      </section>
+    </div>
+  );
+}
+
+const scopeSamples = {
+  within: { frd: caseData.vehicle.frd, ageMonths: 18, mileage: caseData.vehicle.mileageKm },
+  outside: { frd: "2022-02-14", ageMonths: 51, mileage: 68300 },
+} as const;
+
+function ScopeCheckScreen({ storedResult, onFinish }: { storedResult: ScopeCheckResult | null; onFinish: (result: ScopeCheckResult) => void }) {
+  const [scenario, setScenario] = useState<ScopeCheckResult>(storedResult ?? "within");
+  const [started, setStarted] = useState(Boolean(storedResult));
+  const [phase, setPhase] = useState(storedResult ? 5 : 0);
+  const sample = scopeSamples[scenario];
+  const complete = phase >= 5;
+
+  useEffect(() => {
+    if (!started || complete) return;
+    const timer = window.setTimeout(() => setPhase((current) => current + 1), phase === 0 ? 700 : 950);
+    return () => window.clearTimeout(timer);
+  }, [complete, phase, started]);
+
+  const statusMessages = [
+    "Ready to start the 3R effective-scope gate.",
+    `The ${reviewProcessAgentName} loaded Complaint ${complaintId}.`,
+    "The Data Agent is querying the vehicle FRD.",
+    "The Data Agent is reading current mileage from the FASTA Key.",
+    "The Data Agent is evaluating both configured thresholds.",
+    scenario === "within" ? "The vehicle is within the configured 3R effective scope." : "The vehicle is outside the configured 3R effective scope.",
+  ];
+
+  return (
+    <section className="screen-panel scope-check-screen">
+      <div className="screen-heading"><div><p className="section-kicker">3R BUYBACK PROCESS AGENT</p><h2>3R Effective Scope Check</h2><p>This gate checks only FRD and FASTA Key mileage. It is not the final 3R eligibility decision.</p></div>{complete && <span className={scenario === "within" ? "success-pill" : "neutral-pill"}>{scenario === "within" ? <><CheckCircle size={16} weight="fill" />Within scope</> : <><WarningCircle size={16} weight="fill" />Outside scope</>}</span>}</div>
+      <section className="scope-scenario"><div><span>DEMO SAMPLE</span><strong>Choose a stable test outcome</strong></div><button className={scenario === "within" ? "active" : ""} disabled={started} onClick={() => setScenario("within")}><CheckCircle size={18} />Within scope</button><button className={scenario === "outside" ? "active" : ""} disabled={started} onClick={() => setScenario("outside")}><WarningCircle size={18} />Outside scope</button></section>
+      <section className="execution-network scope-network" aria-busy={started && !complete} aria-label="The 3R Buyback Process Agent calls the Data Agent to query FRD and FASTA Key mileage">
+        <header><span>AGENT CALL</span><h3>3R Buyback Process Agent → Data Agent → Vehicle Data</h3><p>Process instance <b>BBP-2026-0096</b> · Complaint {complaintId}</p></header>
+        <div className="execution-flow">
+          <div className={`execution-node agent-node ${phase >= 2 ? "done" : started ? "active" : ""}`}><div className="robot-avatar planner"><Robot size={70} weight="duotone" /><span><FlowArrow size={19} weight="bold" /></span></div><strong>{reviewProcessAgentName}</strong><em>Process Agent</em><small>Starts the effective-scope gate</small></div>
+          <div className={`execution-link ${phase === 1 ? "active" : phase > 1 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase > 1 ? "REQUEST SENT" : phase === 1 ? "CALLING DATA AGENT" : "WAITING"}</b></div>
+          <div className={`execution-node agent-node ${phase >= 5 ? "done" : phase >= 2 ? "active" : ""}`}><div className="robot-avatar execution"><Robot size={70} weight="duotone" /><span><Database size={18} weight="bold" /></span></div><strong>Vehicle Scope Data Agent</strong><em>Data Agent</em><small>Queries FRD and mileage</small></div>
+          <div className={`execution-link ${phase >= 2 && phase < 5 ? "active" : phase >= 5 ? "done" : ""}`}><span><PaperPlaneTilt size={16} weight="fill" /></span><b>{phase >= 5 ? "DATA RETURNED" : phase >= 2 ? "QUERYING" : "WAITING"}</b></div>
+          <div className={`scope-data-system ${complete ? "done" : phase >= 3 ? "active" : ""}`}><Database size={42} weight="duotone" /><strong>Vehicle Data</strong><em>FRD · FASTA Key</em><small>Read only</small></div>
+        </div>
+        <p className="execution-status" role="status" aria-live="polite" aria-atomic="true"><span className={complete ? "map-check" : started ? "spinner" : "status-dot"}>{complete && <Check size={12} weight="bold" />}</span>{statusMessages[phase]}</p>
+      </section>
+      {complete && <section className="scope-result"><header><span>{scenario === "within" ? <CheckCircle size={27} weight="fill" /> : <WarningCircle size={27} weight="fill" />}</span><div><small>DATA AGENT CONCLUSION</small><h3>{scenario === "within" ? "Within the configured 3R effective scope" : "Outside the configured 3R effective scope"}</h3></div></header><dl><div><dt>FRD</dt><dd>{sample.frd}</dd><small>Vehicle age · {sample.ageMonths} months</small><b className={sample.ageMonths <= 24 ? "pass" : "fail"}>{sample.ageMonths <= 24 ? "Within ≤ 24 months" : "Exceeds 24 months"}</b></div><div><dt>Current mileage</dt><dd>{sample.mileage.toLocaleString("en-US")} km</dd><small>Source · FASTA Key</small><b className={sample.mileage <= 50000 ? "pass" : "fail"}>{sample.mileage <= 50000 ? "Within ≤ 50,000 km" : "Exceeds 50,000 km"}</b></div></dl><footer><ShieldCheck size={17} /><span>{scenario === "within" ? "Next: Dealer manually creates the CCO 3R Case. No Case is created by this Agent." : "Next: Dealer may convert to CCA / Special Case outside this Demo. The 3R path stops here."}</span></footer></section>}
+      <div className="screen-actions"><span className="routing-audit-note"><ShieldCheck size={17} />Rule configuration shown explicitly · both source values retained in the audit trail.</span>{!started ? <button className="primary-button wide button-with-icon" onClick={() => setStarted(true)}><Play size={18} weight="fill" />Run scope check</button> : <button className="primary-button wide button-with-icon" disabled={!complete} onClick={() => onFinish(scenario)}>{scenario === "within" ? "Return to Workbench" : "End 3R path"}<ArrowRight size={18} /></button>}</div>
+    </section>
+  );
+}
+
 function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench }: { submission: DealerSubmission | null; onOpenMock: () => void; onContinue: () => void; onWorkbench: () => void }) {
   return (
     <section className="screen-panel dealer-wait-screen">
@@ -475,25 +574,6 @@ function DealerEvidenceScreen({ submission, onOpenMock, onContinue, onWorkbench 
       </> : <section className="dealer-receipt"><header><CheckCircle size={24} weight="fill" /><div><span>DEALER SUBMISSION COMPLETED</span><h3>External event accepted and matched to {caseData.id}</h3></div></header><div><span>Submitted</span><strong>{submission.submittedAt}</strong></div><div><span>Evidence files</span><strong>{submission.attachments.length} items · hashes recorded</strong></div><div><span>Customer communication</span><strong>{submission.contactSummary}</strong></div></section>}
       <div className="screen-actions split-actions"><button className="secondary-button wide button-with-icon" onClick={submission ? onWorkbench : onOpenMock}>{submission ? <ArrowLeft size={18} /> : <Buildings size={18} />}{submission ? "Back to Workbench" : "Open Dealer CCO Mock"}</button><button className="primary-button wide button-with-icon" onClick={onContinue} disabled={!submission}>Generate Review Plan<ArrowRight size={18} /></button></div>
     </section>
-  );
-}
-
-function DealerMockModal({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (submission: DealerSubmission) => void }) {
-  const [summary, setSummary] = useState("Customer confirms recurring power loss and requests a vehicle return. Dealer explained that eligibility requires BMW review.");
-  const [files, setFiles] = useState([true, true, true, true]);
-  const ready = summary.trim().length >= 20 && files.every(Boolean);
-  return (
-    <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="modal dealer-mock" role="dialog" aria-modal="true" aria-labelledby="dealer-mock-title">
-        <div className="mock-banner"><Buildings size={21} /><span>DEMO MOCK · EXTERNAL CCO DEALER VIEW</span></div>
-        <h2 id="dealer-mock-title">Complete Dealer Evidence</h2>
-        <p className="modal-intro">This simulates the dealer completing the real CCO task. Closing this window does not advance the process.</p>
-        <label><span>Customer communication summary</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
-        <fieldset><legend>Evidence manifest</legend>{dealerEvidenceAttachments.map((attachment, index) => <label key={attachment.name}><input type="checkbox" checked={files[index]} onChange={() => setFiles((current) => current.map((value, fileIndex) => fileIndex === index ? !value : value))} /><span><Paperclip size={17} />{attachment.name}</span><small>{files[index] ? "Ready to submit" : "Required"}</small></label>)}</fieldset>
-        <div className="event-preview"><code>DealerSubmissionCompleted</code><span>Emitted only after this form is submitted</span></div>
-        <div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Cancel</button><button className="primary-button wide button-with-icon" disabled={!ready} onClick={() => onSubmit({ contactSummary: summary, submittedAt: "23 Aug 2026 · 14:42", attachments: dealerEvidenceAttachments.filter((_, index) => files[index]) })}><CheckCircle size={18} />Submit evidence to CCO</button></div>
-      </section>
-    </div>
   );
 }
 
