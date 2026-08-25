@@ -45,7 +45,7 @@ export const reviewPlanContext = {
 export const recommendedReviewAgents: ReviewAgent[] = [
   {
     id: "warranty",
-    name: "A8 Repair History Agent",
+    name: "Repair History Data Agent",
     role: "Data Agent",
     category: "warranty",
     purpose: "Verify repeated repairs for the same issue",
@@ -66,7 +66,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   },
   {
     id: "technical",
-    name: "A6 Technical Quality Agent",
+    name: "Technical Quality Assessment Agent",
     role: "Data Agent",
     category: "technical",
     purpose: "Mandatory quality issue and Dealer responsibility check",
@@ -83,7 +83,7 @@ export const recommendedReviewAgents: ReviewAgent[] = [
   },
   {
     id: "parts",
-    name: "A3 Parts Timeline Agent",
+    name: "Parts Timeline Data Agent",
     role: "Data Agent",
     category: "parts",
     purpose: "Check the part order and arrival time behind the 30+ day repair",
@@ -121,6 +121,24 @@ export const recommendedReviewAgents: ReviewAgent[] = [
 ];
 
 export const optionalReviewAgents: ReviewAgent[] = [
+  {
+    id: "data-custom",
+    name: "Custom Data Agent",
+    role: "Data Agent",
+    category: "parts",
+    purpose: "Add another structured business-data query",
+    requirement: "Describe the business question, records to query, filters to apply and the conclusion format required for this investigation.",
+    resultSummary: "The configured data query completed and returned structured facts for human review.",
+    decisionImpact: "Adds a configurable data point without changing the mandatory approval gates.",
+    sources: {
+      type: "data",
+      title: "Configured business data",
+      records: [
+        { id: "DATA-DEMO-01", facts: ["Configured query executed", "Requested filters applied", "Structured result returned"], relevance: "Supports the additional investigation question configured by the user.", rawPreview: "Demo preview of the configured business-data query result." },
+      ],
+    },
+    addedBy: "Human",
+  },
   {
     id: "ocr-custom",
     name: "New OCR Agent",

@@ -7,7 +7,8 @@
   "domains": [
     { "id": "customer-care", "name": "Customer Care", "description": "Complaints, customer requests and case coordination", "pending": 7, "inProgress": 4, "sla": "2 due soon", "tone": "care" },
     { "id": "technical-service", "name": "Technical Service", "description": "Technical diagnosis, escalations and TSARA support", "pending": 5, "inProgress": 6, "sla": "1 due soon", "tone": "technical" },
-    { "id": "warranty", "name": "Warranty", "description": "Coverage decisions, claims and policy exceptions", "pending": 6, "inProgress": 3, "sla": "On track", "tone": "warranty" }
+    { "id": "warranty", "name": "Warranty", "description": "Coverage decisions, claims and policy exceptions", "pending": 6, "inProgress": 3, "sla": "On track", "tone": "warranty" },
+    { "id": "parts", "name": "Parts", "description": "Parts orders, availability, delivery timing and responsibility", "pending": 3, "inProgress": 2, "sla": "1 due soon", "tone": "parts" }
   ],
   "workItems": [
     {
@@ -56,6 +57,22 @@
       "intent": "Recurring power loss",
       "priority": "Medium",
       "status": "In review",
+      "featured": false
+    },
+    {
+      "domain": "Parts",
+      "process": "Parts Delay Review",
+      "caseId": "PT-2026-0207",
+      "callId": "—",
+      "recordType": "Parts task",
+      "recordId": "PT-2026-0207",
+      "stage": "Delivery Timeline Review",
+      "waitingOn": "Parts",
+      "nextAction": "View timeline",
+      "trigger": "Repair duration threshold",
+      "intent": "Parts delivery exceeded target",
+      "priority": "Medium",
+      "status": "Approval pending",
       "featured": false
     },
     {

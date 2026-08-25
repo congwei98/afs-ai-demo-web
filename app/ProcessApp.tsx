@@ -134,6 +134,10 @@ function RoleBadge({ children }: { children: React.ReactNode }) {
   return <span className="role-badge">{children}</span>;
 }
 
+function agentTypeLabel(agent: ReviewAgent) {
+  return agent.category === "ocr" ? "OCR Agent" : agent.role;
+}
+
 function rawLineText(line: ConversationLine) {
   return line.parts.map((part) => part.correction ? `${part.correction.before}${part.text}` : part.text).join("");
 }
@@ -296,6 +300,7 @@ function ProductHeader({ onHome, showProcess = false }: { onHome?: () => void; s
 function DomainIcon({ tone, size = 25 }: { tone: string; size?: number }) {
   if (tone === "technical") return <Wrench size={size} />;
   if (tone === "warranty") return <ShieldCheck size={size} />;
+  if (tone === "parts") return <Database size={size} />;
   return <Headset size={size} />;
 }
 
@@ -319,7 +324,7 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
   const approvalsComplete = approvals.a6 === "approved" && approvals.a3 === "approved";
   const approvalTask = reviewState === "results" && selectedDomain === "Technical Service"
     ? { key: "a6" as const, owner: "A6" as const, agent: agents.find((agent) => agent.id === "technical") }
-    : reviewState === "results" && selectedDomain === "Warranty"
+    : reviewState === "results" && selectedDomain === "Parts"
       ? { key: "a3" as const, owner: "A3" as const, agent: agents.find((agent) => agent.id === "parts") }
       : null;
   const waitingForDealer = Boolean(featuredItem) && ccoCaseCreated && !dealerNegotiation && !completed;
@@ -331,7 +336,7 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
     : reviewState === "results"
       ? approvalsComplete
         ? { title: "Investigation approvals complete", description: "A6 approved the quality assessment and A3 approved the parts timeline. The investigation can now continue to the human Decision step.", stage: "Investigation Complete", waitingOn: "Customer Care · A7", status: "Action required", action: "Continue to Decision", handler: onOpen }
-        : { title: "Investigation approvals pending", description: "Agent queries are complete. Open Technical Service for the A6 approval and Warranty for the A3 parts-timeline approval.", stage: "Investigation Approval", waitingOn: "A6 · A3", status: "Waiting for approval", action: "View investigation", handler: onOpen }
+        : { title: "Investigation approvals pending", description: "Agent queries are complete. Open Technical Service for the technical approval and Parts for the parts-timeline approval.", stage: "Investigation Approval", waitingOn: "Technical Service · Parts", status: "Waiting for approval", action: "View investigation", handler: onOpen }
     : scopeComplete
       ? scopeCheckResult === "within"
         ? dealerSubmission
@@ -597,6 +602,7 @@ function ScopeCheckScreen({ storedResult, onFinish }: { storedResult: ScopeCheck
   return (
     <section className="screen-panel scope-check-screen">
       <div className="screen-heading"><div><p className="section-kicker">3R BUYBACK PROCESS AGENT</p><h2>3R Effective Scope Check</h2><p>This gate checks only FRD and FASTA Key mileage. It is not the final 3R eligibility decision.</p></div>{complete && <span className={scenario === "within" ? "success-pill" : "neutral-pill"}>{scenario === "within" ? <><CheckCircle size={16} weight="fill" />Within scope</> : <><WarningCircle size={16} weight="fill" />Outside scope</>}</span>}</div>
+      <section className="china-3r-rule" aria-labelledby="china-3r-rule-title"><header><ShieldCheck size={23} weight="fill" aria-hidden="true" /><div><span>中国家用汽车三包规则</span><h3 id="china-3r-rule-title">三包有效期不得低于 2 年或 50,000 公里，以先到者为准</h3></div><b>Scope rule</b></header><div><article><strong>2 years</strong><span>Time limit</span><small>Demo uses the vehicle FRD returned by Data Agent as the configured start-date field.</small></article><i>OR · WHICHEVER COMES FIRST</i><article><strong>50,000 km</strong><span>Mileage limit</span><small>Current mileage is read from the FASTA Key vehicle record.</small></article></div><footer><WarningCircle size={16} aria-hidden="true" />This gate checks the effective scope only. Meeting both checks does not by itself confirm final Buyback eligibility.</footer></section>
       <section className="scope-scenario"><div><span>DEMO SAMPLE</span><strong>Choose a stable test outcome</strong></div><button className={scenario === "within" ? "active" : ""} disabled={started} onClick={() => setScenario("within")}><CheckCircle size={18} />Within scope</button><button className={scenario === "outside" ? "active" : ""} disabled={started} onClick={() => setScenario("outside")}><WarningCircle size={18} />Outside scope</button></section>
       <section className="execution-network scope-network" aria-busy={started && !complete} aria-label="The 3R Buyback Process Agent calls the Data Agent to query FRD and FASTA Key mileage">
         <header><span>AGENT CALL</span><h3>3R Buyback Process Agent → Data Agent → Vehicle Data</h3><p>Process instance <b>BBP-2026-0096</b> · Complaint {complaintId}</p></header>
@@ -957,7 +963,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, o
         </section>}
       </section>}
 
-      {state === "plan" && <section className="investigation-triggers" aria-label="AI investigation triggers"><header><MagicWand size={20} aria-hidden="true" /><div><span>AI-RECOMMENDED PLAN</span><h3>Configured from Complaint and Dealer case signals</h3></div></header><div><article><b>A6 · Mandatory</b><strong>Quality issue and Dealer repair responsibility</strong><span>Required for every 3R investigation.</span></article><article><b>A3 · Triggered</b><strong>Parts order and arrival timeline</strong><span>Customer reports a repair over 30 days; Dealer supplied a parts timeline.</span></article><article><b>A8 · Triggered</b><strong>Repeated repair history</strong><span>Complaint reports five repairs for the same issue.</span></article></div></section>}
+      {state === "plan" && <section className="investigation-triggers" aria-label="AI investigation triggers"><header><MagicWand size={20} aria-hidden="true" /><div><span>AI-RECOMMENDED PLAN</span><h3>Configured from Complaint and Dealer case signals</h3></div></header><div><article><b>Mandatory</b><strong>Quality issue and Dealer repair responsibility</strong><span>Required for every 3R investigation.</span></article><article><b>Triggered · 30+ days</b><strong>Parts order and arrival timeline</strong><span>Customer reports a repair over 30 days; Dealer supplied a parts timeline.</span></article><article><b>Triggered · repeated repair</b><strong>Repair history for the same issue</strong><span>Complaint reports five repairs for the same issue.</span></article></div></section>}
 
       {(state === "running" || state === "results") && (
         <section className={`agent-network ${state}`} aria-label={`${reviewProcessAgentName} orchestration`}>
@@ -977,7 +983,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, o
                   <div className={`agent-connection ${phase}`}><span className="network-packet">{runPhase === "return" && active ? <Check size={14} weight="bold" /> : <PaperPlaneTilt size={15} weight="fill" />}</span><b>{active ? runPhase === "return" ? "RESULT" : runPhase === "working" ? "PROCESSING" : "REQUEST" : done ? "RESULT RECEIVED" : "QUEUED"}</b></div>
                   <div className="agent-robot-node">
                     <div className={`robot-avatar ${agent.category}`} aria-hidden="true"><Robot size={58} weight="duotone" /><span><ReviewAgentIcon category={agent.category} size={17} /></span></div>
-                    <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agent.role}</em><small>{status}</small></div>
+                    <div className="robot-agent-copy"><strong>{agent.name}</strong><em>{agentTypeLabel(agent)}</em><small>{status}</small></div>
                     {state === "results" && <button onClick={() => onResult(agent.id)}><Eye size={16} />View result</button>}
                   </div>
                 </div>;
@@ -988,7 +994,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, o
         </section>
       )}
 
-      {state === "results" && <section className="investigation-approval-gate"><header><ShieldCheck size={21} aria-hidden="true" /><div><span>HUMAN APPROVAL GATE</span><h3>{approvalsComplete ? "Required approvals completed" : "Return to Workbench for A6 and A3 approvals"}</h3></div></header><div><article><span>A6 · Technical Service</span><strong>{approvals.a6 === "approved" ? "Approved" : approvals.a6 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article><article><span>A3 · Warranty</span><strong>{approvals.a3 === "approved" ? "Approved" : approvals.a3 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article></div><p>Current user has both approval permissions. No role switching is required.</p></section>}
+      {state === "results" && <section className="investigation-approval-gate"><header><ShieldCheck size={21} aria-hidden="true" /><div><span>HUMAN APPROVAL GATE</span><h3>{approvalsComplete ? "Required approvals completed" : "Return to Workbench for Technical Service and Parts approvals"}</h3></div></header><div><article><span>Technical Service approval</span><strong>{approvals.a6 === "approved" ? "Approved" : approvals.a6 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article><article><span>Parts approval</span><strong>{approvals.a3 === "approved" ? "Approved" : approvals.a3 === "changes_requested" ? "Changes requested" : "Pending approval"}</strong></article></div><p>Current user has both approval permissions. No role switching is required.</p></section>}
 
       {state === "plan" && <div className="action-plan-heading"><div><p>INVESTIGATION PLAN</p><h3>{agents.length} configured Agent steps</h3><span>Open a step to rename the Agent or edit its query instruction.</span></div><button className="secondary-button button-with-icon" onClick={() => setAddOpen(!addOpen)}><Plus size={17} />Add Agent</button></div>}
 
@@ -1003,6 +1009,7 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, o
                 <span className="step-number">{index + 1}</span>
                 <span className={`agent-symbol ${agent.category}`}><ReviewAgentIcon category={agent.category} /></span>
                 <span className="agent-card-title"><strong>{agent.name}</strong><span>{agent.purpose}</span></span>
+                <RoleBadge>{agentTypeLabel(agent)}</RoleBadge>
                 {agent.addedBy && <span className="human-added">Added by human</span>}
                 <CaretDown className={expanded ? "expanded" : ""} size={18} />
               </button>{agent.addedBy && state === "plan" && <button className="remove-agent-button" aria-label={`Remove ${agent.name} from plan`} onClick={() => removeAgent(agent.id)}><Trash size={17} /><span>Remove</span></button>}</div>
@@ -1148,7 +1155,7 @@ function ExecutionScreen({ instruction, completed, onComplete, onWorkbench }: { 
 function AccessModal({ agents, onCancel, onAllow }: { agents: ReviewAgent[]; onCancel: () => void; onAllow: () => void }) {
   return (
     <div className="overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Confirm Investigation Access</h2><p className="modal-intro">The current Demo user can run every configured Agent and approve both A6 and A3 results. No role switch is required.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name}</strong><RoleBadge>{agent.role}</RoleBadge></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><CheckCircle size={18} aria-hidden="true" />A6 + A3 approval access</span></div><p>Agent access ends when this investigation is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="access-title"><h2 id="access-title"><LockKeyOpen size={24} aria-hidden="true" />Confirm Investigation Access</h2><p className="modal-intro">The current Demo user can run every configured Agent and approve both A6 and A3 results. No role switch is required.</p><div className="access-sources dynamic">{agents.map((agent) => <div key={agent.id}><span className={`source-icon ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={20} /></span><strong>{agent.name}</strong><RoleBadge>{agentTypeLabel(agent)}</RoleBadge></div>)}</div><div className="access-scope"><span><Target size={18} aria-hidden="true" />{caseData.access.scope}</span><span><Eye size={18} aria-hidden="true" />{caseData.access.mode}</span><span><CheckCircle size={18} aria-hidden="true" />A6 + A3 approval access</span></div><p>Agent access ends when this investigation is done.</p><div className="modal-actions"><button className="secondary-button wide" onClick={onCancel}>Back to Plan</button><button className="primary-button wide button-with-icon" onClick={onAllow}><LockKeyOpen size={18} aria-hidden="true" />Allow &amp; Run</button></div></section>
     </div>
   );
 }
@@ -1232,7 +1239,7 @@ function AgentResultDrawer({ agent, returnLabel, onClose }: { agent: ReviewAgent
   return (
     <div className="overlay drawer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="drawer agent-result-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-        <div className="drawer-heading"><div><p className="section-kicker">AGENT RESULT</p><h2 id="drawer-title"><span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={24} /></span>{agent.name}</h2><span>{agent.role}</span></div><button className="close-button" aria-label="Close Agent result" onClick={onClose}><X size={22} /></button></div>
+        <div className="drawer-heading"><div><p className="section-kicker">AGENT RESULT</p><h2 id="drawer-title"><span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} size={24} /></span>{agent.name}</h2><span>{agentTypeLabel(agent)}</span></div><button className="close-button" aria-label="Close Agent result" onClick={onClose}><X size={22} /></button></div>
         <section className="agent-result-overview">
           <span>RESULT</span>
           <h3>{agent.resultSummary}</h3>
