@@ -50,9 +50,10 @@ import {
 import workbenchData from "@/data/workbench.json";
 import caseData from "@/data/demo-case.json";
 import { historicalCalls, intakeDemo, type CallInsight, type ConversationLine, type HistoricalCall, type SemanticType } from "@/data/intake-demo";
-import { optionalReviewAgents, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type AgentSources, type ReviewAgent } from "@/data/review-plan";
+import { optionalReviewAgents, recommendationKnowledgeAgent, recommendedReviewAgents, reviewPlanContext, settlementRecommendation, type AgentSources, type ReviewAgent } from "@/data/review-plan";
 
 type ReviewState = "plan" | "running" | "results";
+type RecommendationState = "prepare" | "running" | "ready";
 type ComplaintSource = "call" | "scan";
 type DealerAttachment = {
   name: string;
@@ -88,7 +89,7 @@ type EditableAmountKey =
   | "bmwCoverHumanityCare"
   | "bmwCoverOther";
 
-const steps = ["Intake", "Route", "Dealer Negotiation", "3R Scope Check", "3R Case Setup", "Investigation", "Decision", "Execution"];
+const steps = ["Intake", "Route", "Dealer Negotiation", "3R Scope Check", "3R Case Setup", "Investigation", "Recommendation & Decision", "Execution"];
 const reviewProcessAgentName = "3R Buyback Process Agent";
 const complaintId = "CCO-CMP-2026-0096";
 const processInstanceId = "BBP-2026-0096";
@@ -162,6 +163,7 @@ export default function ProcessApp() {
   const [view, setView] = useState<"workbench" | "case">("workbench");
   const [stage, setStage] = useState(1);
   const [reviewState, setReviewState] = useState<ReviewState>("plan");
+  const [recommendationState, setRecommendationState] = useState<RecommendationState>("prepare");
   const [accessOpen, setAccessOpen] = useState(false);
   const [, setAccessGranted] = useState(false);
   const [resultAgentId, setResultAgentId] = useState<string | null>(null);
@@ -188,6 +190,7 @@ export default function ProcessApp() {
     setStage(reviewState === "running" || reviewState === "results" ? 6 : dealerSubmission ? 5 : scopeCheckResult ? 4 : dealerNegotiation ? 3 : 1);
     if (reviewState === "plan") {
       setAccessGranted(false);
+      setRecommendationState("prepare");
       setPlannedAgents(recommendedReviewAgents.map((agent) => ({ ...agent })));
       const initialBuybackDraft = calculateBuybackSolution({ ...settlementRecommendation.solution });
       setBuybackDraft(initialBuybackDraft);
@@ -236,7 +239,7 @@ export default function ProcessApp() {
     <Workbench onOpen={openCase} onNegotiationMock={() => setNegotiationMockOpen(true)} onDealerSetupMock={() => setDealerSetupMockOpen(true)} completed={caseCompleted} routedDomain={routedDomain} ccoCaseCreated={ccoCaseCreated} dealerNegotiation={dealerNegotiation} scopeCheckResult={scopeCheckResult} dealerSubmission={dealerSubmission} reviewState={reviewState} agents={plannedAgents} approvals={investigationApprovals} onApproval={updateInvestigationApproval} onResult={setResultAgentId} />
     {negotiationMockOpen && <DealerNegotiationMockModal onCancel={() => setNegotiationMockOpen(false)} onSubmit={(update) => { setDealerNegotiation(update); setNegotiationMockOpen(false); }} />}
     {dealerSetupMockOpen && <DealerCaseSetupMockModal existing={dealerSubmission} onCancel={() => setDealerSetupMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerSetupMockOpen(false); }} />}
-    {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel="Back to Workbench approval" onClose={() => setResultAgentId(null)} />}
+    {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId) ?? recommendationKnowledgeAgent} returnLabel="Back to Workbench approval" onClose={() => setResultAgentId(null)} />}
   </>;
 
   return (
@@ -273,14 +276,14 @@ export default function ProcessApp() {
               onWorkbench={backToWorkbench}
             />
           )}
-          {stage === 7 && <RecommendationScreen agents={plannedAgents} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(6)} onConfirm={completeCase} />}
+          {stage === 7 && <RecommendationScreen investigationAgents={plannedAgents} knowledgeAgent={recommendationKnowledgeAgent} state={recommendationState} setState={setRecommendationState} solution={buybackDraft} setSolution={setBuybackDraft} instruction={decisionInstruction} setInstruction={setDecisionInstruction} onResult={setResultAgentId} onBack={() => setStage(6)} onConfirm={completeCase} />}
           {stage === 8 && <ExecutionScreen instruction={decisionInstruction} completed={caseCompleted} onComplete={setCaseCompleted} onWorkbench={backToWorkbench} />}
         </div>
       </section>
       {accessOpen && <AccessModal agents={plannedAgents} onCancel={() => setAccessOpen(false)} onAllow={allowAccess} />}
       {negotiationMockOpen && <DealerNegotiationMockModal onCancel={() => setNegotiationMockOpen(false)} onSubmit={(update) => { setDealerNegotiation(update); setNegotiationMockOpen(false); }} />}
       {dealerSetupMockOpen && <DealerCaseSetupMockModal existing={dealerSubmission} onCancel={() => setDealerSetupMockOpen(false)} onSubmit={(submission) => { setDealerSubmission(submission); setDealerSetupMockOpen(false); }} />}
-      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId)!} returnLabel={stage === 7 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
+      {resultAgentId && <AgentResultDrawer agent={plannedAgents.find((agent) => agent.id === resultAgentId) ?? recommendedReviewAgents.find((agent) => agent.id === resultAgentId) ?? recommendationKnowledgeAgent} returnLabel={stage === 7 ? "Back to Recommendation & Decision" : "Back to Review Results"} onClose={() => setResultAgentId(null)} />}
     </main>
   );
 }
@@ -335,7 +338,7 @@ function Workbench({ onOpen, onNegotiationMock, onDealerSetupMock, completed, ro
     ? { title: "View completed case", description: "The current Demo flow is complete and its execution receipt is available.", stage: "Completed", waitingOn: "No blocker", status: "Completed", action: "View", handler: onOpen }
     : reviewState === "results"
       ? approvalsComplete
-        ? { title: "Investigation approvals complete", description: "A6 approved the quality assessment and A3 approved the parts timeline. The investigation can now continue to the human Decision step.", stage: "Investigation Complete", waitingOn: "Customer Care · A7", status: "Action required", action: "Continue to Decision", handler: onOpen }
+        ? { title: "Investigation approvals complete", description: "Technical Service approved the quality assessment and Parts approved the parts timeline. The case can now enter Recommendation & Decision.", stage: "Investigation Complete", waitingOn: "Customer Care", status: "Action required", action: "Open Recommendation", handler: onOpen }
         : { title: "Investigation approvals pending", description: "Agent queries are complete. Open Technical Service for the technical approval and Parts for the parts-timeline approval.", stage: "Investigation Approval", waitingOn: "Technical Service · Parts", status: "Waiting for approval", action: "View investigation", handler: onOpen }
     : scopeComplete
       ? scopeCheckResult === "within"
@@ -1019,14 +1022,16 @@ function ReviewScreen({ state, agents, setAgents, dealerSubmission, approvals, o
         })}
       </div>}
 
-      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the configuration if needed, then run the investigation." : approvalsComplete ? "A6 and A3 approvals are complete." : "Investigation results cannot enter Decision before both approvals."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Confirm &amp; Run Investigation</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button>{approvalsComplete ? <button className="primary-button wide button-with-icon" onClick={onNext}>Review Recommendation<ArrowRight size={18} /></button> : <button className="primary-button wide button-with-icon" onClick={onWorkbench}>Return to Workbench for Approvals<ArrowRight size={18} /></button>}</div>}</div>}
+      {state !== "running" && <div className="screen-actions split-actions"><span className="review-action-note">{state === "plan" ? "Edit the configuration if needed, then run the investigation." : approvalsComplete ? "Technical Service and Parts approvals are complete." : "Investigation results cannot enter Recommendation & Decision before both approvals."}</span>{state === "plan" && <button className="primary-button wide button-with-icon" onClick={onAccess}><LockKeyOpen size={18} />Confirm &amp; Run Investigation</button>}{state === "results" && <div className="result-actions"><button className="secondary-button wide button-with-icon" onClick={replanAgents}><ArrowLeft size={18} />Edit Plan</button>{approvalsComplete ? <button className="primary-button wide button-with-icon" onClick={onNext}>Start Recommendation &amp; Decision<ArrowRight size={18} /></button> : <button className="primary-button wide button-with-icon" onClick={onWorkbench}>Return to Workbench for Approvals<ArrowRight size={18} /></button>}</div>}</div>}
     </section>
   );
 }
 
-function RecommendationScreen({ agents, solution, setSolution, instruction, setInstruction, onResult, onBack, onConfirm }: { agents: ReviewAgent[]; solution: BuybackSolution; setSolution: (value: BuybackSolution) => void; instruction: string; setInstruction: (value: string) => void; onResult: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
+function RecommendationScreen({ investigationAgents, knowledgeAgent, state, setState, solution, setSolution, instruction, setInstruction, onResult, onBack, onConfirm }: { investigationAgents: ReviewAgent[]; knowledgeAgent: ReviewAgent; state: RecommendationState; setState: (value: RecommendationState) => void; solution: BuybackSolution; setSolution: (value: BuybackSolution) => void; instruction: string; setInstruction: (value: string) => void; onResult: (agentId: string) => void; onBack: () => void; onConfirm: () => void }) {
   const [reviewed, setReviewed] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState(0);
+  const supportingAgents = [...investigationAgents, knowledgeAgent];
   const calculated = calculateBuybackSolution(solution);
   const allocatedVehicleCost = calculated.customerCoverVehicle + calculated.dealerCoverVehicle + calculated.bmwCoverVehicle;
   const allocationBalanced = allocatedVehicleCost === calculated.vehicleCost;
@@ -1036,12 +1041,46 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
     setSolution(next);
     if (instruction === previousDraftInstruction) setInstruction(createDecisionInstruction(next));
   };
+
+  useEffect(() => {
+    if (state !== "running") return;
+    if (generationPhase >= 3) {
+      const timer = window.setTimeout(() => setState("ready"), 650);
+      return () => window.clearTimeout(timer);
+    }
+    const timer = window.setTimeout(() => setGenerationPhase((current) => current + 1), generationPhase === 0 ? 950 : 1250);
+    return () => window.clearTimeout(timer);
+  }, [generationPhase, setState, state]);
+
+  const startRecommendation = () => {
+    setGenerationPhase(0);
+    setState("running");
+  };
+
   return (
     <section className="screen-panel recommendation-screen">
       <div className="screen-heading"><div><p className="section-kicker">CUSTOMER CARE</p><h2>Recommendation &amp; Decision</h2></div></div>
-      <div className="decision-workspace">
+      {state !== "ready" && <section className="recommendation-preparation">
+        <header><div><span>COMPENSATION PREPARATION</span><h3>{state === "running" ? "Generating the Buyback recommendation" : "Prepare the recommendation inputs"}</h3><p>The investigation is complete. The compensation stage now loads a Demo valuation and calls the Knowledge Agent before the Process Agent drafts a proposal.</p></div><b>Human confirmation required</b></header>
+        <div className="recommendation-inputs">
+          <article><span className="preparation-icon mock"><Car size={24} aria-hidden="true" /></span><div><small>MOCK INPUT</small><strong>Used car price · {formatCny(calculated.usedCarPrice)}</strong><p>Preconfigured Demo value. It is not a live used-car valuation or approval.</p></div></article>
+          <article><span className="preparation-icon knowledge"><Books size={24} aria-hidden="true" /></span><div><small>COMPENSATION-STAGE AGENT</small><strong>{knowledgeAgent.name}</strong><p>Search similar cases and compare the allocation structure without copying historical amounts.</p></div><RoleBadge>{agentTypeLabel(knowledgeAgent)}</RoleBadge></article>
+          <article><span className="preparation-icon process"><MagicWand size={24} aria-hidden="true" /></span><div><small>MOCK AI RECOMMENDATION</small><strong>{reviewProcessAgentName}</strong><p>Combine approved investigation results, the Demo valuation and historical patterns into an editable draft.</p></div></article>
+        </div>
+        {state === "running" && <div className="recommendation-generation-network" aria-label="Process Agent loads the mock used car value, calls the Knowledge Agent and generates a recommendation">
+          <div className={`generation-node ${generationPhase > 0 ? "done" : "active"}`}><Robot size={50} weight="duotone" /><strong>{reviewProcessAgentName}</strong><small>Process Agent</small></div>
+          <div className={`generation-link ${generationPhase === 0 ? "active" : generationPhase > 0 ? "done" : ""}`}><span><PaperPlaneTilt size={14} weight="fill" /></span><b>{generationPhase === 0 ? "LOAD MOCK VALUE" : "VALUE LOADED"}</b></div>
+          <div className={`generation-node mock-node ${generationPhase === 1 ? "active" : generationPhase > 1 ? "done" : ""}`}><Car size={42} weight="duotone" /><strong>{formatCny(calculated.usedCarPrice)}</strong><small>Mock used-car value</small></div>
+          <div className={`generation-link ${generationPhase === 1 ? "active" : generationPhase > 1 ? "done" : ""}`}><span><PaperPlaneTilt size={14} weight="fill" /></span><b>{generationPhase <= 1 ? "CALL KNOWLEDGE" : "MATCHES RETURNED"}</b></div>
+          <div className={`generation-node ${generationPhase === 2 ? "active" : generationPhase > 2 ? "done" : ""}`}><Robot size={50} weight="duotone" /><strong>{knowledgeAgent.name}</strong><small>Knowledge Agent</small></div>
+        </div>}
+        <p className={`recommendation-generation-status ${state}`} role="status" aria-live="polite">{state === "prepare" ? "No recommendation has been generated yet." : generationPhase === 0 ? "The Process Agent is loading the Mock used-car value…" : generationPhase === 1 ? "The Process Agent is sending the approved case findings to the Knowledge Agent…" : generationPhase === 2 ? "The Knowledge Agent is matching comparable cases and returning its result…" : "The Process Agent is combining all inputs into an editable recommendation…"}</p>
+        <div className="screen-actions"><button className="secondary-button wide button-with-icon" disabled={state === "running"} onClick={onBack}><ArrowLeft size={18} />Back to Investigation</button><button className="primary-button wide button-with-icon" disabled={state === "running"} onClick={startRecommendation}>{state === "running" ? <><span className="spinner" />Generating recommendation</> : <><MagicWand size={18} />Generate recommendation</>}</button></div>
+      </section>}
+      {state === "ready" && <><div className="decision-workspace">
+        <section className="recommendation-receipts" aria-label="Recommendation generation receipts"><article><span>MOCK VALUATION</span><strong>{formatCny(calculated.usedCarPrice)}</strong><small>Editable below · no live UC integration</small></article><article><span>KNOWLEDGE RETRIEVAL</span><strong>3 comparable cases</strong><button onClick={() => onResult(knowledgeAgent.id)}><Eye size={16} />View result</button></article><article><span>GENERATION STATUS</span><strong><CheckCircle size={17} weight="fill" />AI draft ready</strong><small>Final decision remains with Customer Care</small></article></section>
         <section className="decision-recommendation" aria-labelledby="decision-recommendation-title">
-          <div className="decision-ai-mark"><MagicWand size={22} aria-hidden="true" /><span>AI RECOMMENDATION</span></div>
+          <div className="decision-ai-mark"><MagicWand size={22} aria-hidden="true" /><span>MOCK AI RECOMMENDATION · HUMAN DECISION REQUIRED</span></div>
           <h3 id="decision-recommendation-title">{settlementRecommendation.title}</h3>
           <p>{settlementRecommendation.summary}</p>
           <div className="qualification-path" aria-label="Why this case meets the 3R condition">
@@ -1088,11 +1127,11 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
 
         <section className="decision-agent-results" aria-label="Agent results supporting the recommendation">
           <button className="decision-results-toggle" onClick={() => setResultsOpen((open) => !open)} aria-expanded={resultsOpen}>
-            <span><strong>Based on {agents.length} Agent {agents.length === 1 ? "result" : "results"}</strong><small>Open the result or source only when you need to verify the recommendation.</small></span>
+            <span><strong>Based on {supportingAgents.length} Agent {supportingAgents.length === 1 ? "result" : "results"}</strong><small>Approved investigation results plus compensation-stage knowledge retrieval.</small></span>
             <CaretDown size={21} className={resultsOpen ? "expanded" : ""} aria-hidden="true" />
           </button>
           {resultsOpen && <div className="decision-results-list">
-            {agents.map((agent) => <article key={agent.id}>
+            {supportingAgents.map((agent) => <article key={agent.id}>
               <span className={`agent-symbol ${agent.category}`} aria-hidden="true"><ReviewAgentIcon category={agent.category} /></span>
               <div><strong>{agent.name}</strong><p>{agent.resultSummary}</p><small>{agent.decisionImpact}</small></div>
               <button onClick={() => onResult(agent.id)}><Eye size={17} aria-hidden="true" />View result</button>
@@ -1106,7 +1145,7 @@ function RecommendationScreen({ agents, solution, setSolution, instruction, setI
           <label className="decision-review-check"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /><span>I reviewed the five same-issue repair records, Technical Service finding and internal allocation separately.</span></label>
         </section>
       </div>
-      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Review</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim() || !reviewed} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div>
+      <div className="screen-actions"><button className="secondary-button wide button-with-icon" onClick={onBack}><ArrowLeft size={18} />Back to Investigation</button><button className="primary-button wide button-with-icon" disabled={!instruction.trim() || !reviewed} onClick={onConfirm}><CheckCircle size={18} />Confirm &amp; Execute</button></div></>}
     </section>
   );
 }

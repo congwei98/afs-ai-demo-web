@@ -99,26 +99,27 @@ export const recommendedReviewAgents: ReviewAgent[] = [
       ],
     },
   },
-  {
-    id: "knowledge",
-    name: "Case Knowledge Agent",
-    role: "Knowledge Agent",
-    category: "knowledge",
-    purpose: "Compare policy reasoning and internal allocations",
-    requirement: "Find approved cases with a comparable known quality issue and Buyback request. Compare rule reasoning, dealer-conduct findings and itemized cost allocations without copying a historical outcome.",
-    resultSummary: "The closest cases use the same valuation and cost-allocation structure, with case-specific amounts.",
-    decisionImpact: "Supports an itemized proposal while keeping every amount subject to human review.",
-    sources: {
-      type: "knowledge",
-      title: "Comparable knowledge matches",
-      matches: [
-        { id: "3R-DEMO-0071", title: "Approved serious power-loss Buyback case", sourceType: "Approved case", relevance: 94, matchedOn: ["Same safety-performance fault", "Same Buyback request", "Same policy pathway"], caveat: "Different vehicle model and repair dates.", contribution: "Supports the valuation and party-allocation structure, not the example amounts.", excerpt: "Buyback was approved after the safety-performance fault remained unresolved following repeated repair attempts." },
-        { id: "3R-DEMO-0058", title: "High-voltage shutdown Buyback case", sourceType: "Approved case", relevance: 88, matchedOn: ["Comparable safety issue", "Same requested remedy", "Similar unsuccessful repair history"], caveat: "One additional repair attempt.", contribution: "Confirms that vehicle cost and humanity care are assessed separately.", excerpt: "Buyback approved with case-specific vehicle and humanity-care allocations." },
-        { id: "3R-DEMO-0034", title: "Control-unit fault case", sourceType: "Closed case", relevance: 67, matchedOn: ["Related product fault", "Same Buyback request"], caveat: "Only one repair and no matching safety classification.", contribution: "Provides a counterexample and prevents copying an outcome without checking differences.", excerpt: "Buyback was not approved because the evidence did not establish the same policy condition." },
-      ],
-    },
-  },
 ];
+
+export const recommendationKnowledgeAgent: ReviewAgent = {
+  id: "knowledge",
+  name: "Case Knowledge Agent",
+  role: "Knowledge Agent",
+  category: "knowledge",
+  purpose: "Compare policy reasoning and internal allocations",
+  requirement: "Find approved cases with a comparable known quality issue and Buyback request. Compare rule reasoning, dealer-conduct findings and itemized cost allocations without copying a historical outcome.",
+  resultSummary: "Three comparable cases were found. The closest approved cases use the same valuation and cost-allocation structure, with case-specific amounts.",
+  decisionImpact: "Supports an itemized proposal while keeping every amount subject to human review.",
+  sources: {
+    type: "knowledge",
+    title: "Comparable knowledge matches",
+    matches: [
+      { id: "3R-DEMO-0071", title: "Approved serious power-loss Buyback case", sourceType: "Approved case", relevance: 94, matchedOn: ["Same safety-performance fault", "Same Buyback request", "Same policy pathway"], caveat: "Different vehicle model and repair dates.", contribution: "Supports the valuation and party-allocation structure, not the example amounts.", excerpt: "Buyback was approved after the safety-performance fault remained unresolved following repeated repair attempts." },
+      { id: "3R-DEMO-0058", title: "High-voltage shutdown Buyback case", sourceType: "Approved case", relevance: 88, matchedOn: ["Comparable safety issue", "Same requested remedy", "Similar unsuccessful repair history"], caveat: "One additional repair attempt.", contribution: "Confirms that vehicle cost and humanity care are assessed separately.", excerpt: "Buyback approved with case-specific vehicle and humanity-care allocations." },
+      { id: "3R-DEMO-0034", title: "Control-unit fault case", sourceType: "Closed case", relevance: 67, matchedOn: ["Related product fault", "Same Buyback request"], caveat: "Only one repair and no matching safety classification.", contribution: "Provides a counterexample and prevents copying an outcome without checking differences.", excerpt: "Buyback was not approved because the evidence did not establish the same policy condition." },
+    ],
+  },
+};
 
 export const optionalReviewAgents: ReviewAgent[] = [
   {
