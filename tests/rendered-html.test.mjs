@@ -36,4 +36,14 @@ test("production server renders the process workbench", async (context) => {
   assert.match(html, /Customer Care/);
   assert.match(html, /Technical Service/);
   assert.match(html, /Warranty/);
+
+  const chatResponse = await fetch(`http://127.0.0.1:${port}/chat`);
+  assert.equal(chatResponse.status, 200);
+  const chatHtml = await chatResponse.text();
+  assert.match(chatHtml, /AFS AI Workbench/);
+  assert.match(chatHtml, /任务中心/);
+  assert.match(chatHtml, /客诉接入与分类/);
+  assert.match(chatHtml, /Complaint Router/);
+  assert.match(chatHtml, /AI 识别高风险投诉｜陈女士/);
+  assert.doesNotMatch(chatHtml, /A6 DATA APPROVAL/);
 });
