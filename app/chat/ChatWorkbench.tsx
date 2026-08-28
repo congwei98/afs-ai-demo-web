@@ -13,6 +13,7 @@ import {
   Database,
   FileText,
   FlowArrow,
+  Paperclip,
   PaperPlaneTilt,
   Pause,
   Play,
@@ -59,6 +60,7 @@ type Message = {
   visible: number;
   streaming?: boolean;
   tone?: "risk" | "approval";
+  actions?: string[];
 };
 type AgentNode = {
   id: string;
@@ -84,7 +86,7 @@ const baseGraphs: Record<Phase, AgentNode[]> = {
     { id: "router", name: "Complaint Router", type: "Router Agent", kind: "agent", detail: "我在原话里听到了三个需要立即升级的信号：行驶中失去动力、同一问题修了五次、客户明确要求退车。综合判断，这是高风险投诉，建议先创建 CCO 案件保留原始语境。", evidence: "本次电话逐字稿、车辆 VIN 与客户主数据", instruction: "先完整听完来电，保留客户原话；再判断诉求、风险和应进入的业务流程。", x: 50, y: 48 },
   ],
   retention: [
-    { id: "retention", name: "Retention Process", type: "Process Agent", kind: "agent", detail: "我需要回答五个问题：同一故障维修了几次、现在有没有新的维修方案、需要什么零件、是否满足三包条件，以及零件什么时候到。技术方案与三包可以同时核验；库存要等零件号确认后再查。建议把这些事实确认清楚后，再为 A7 生成客户沟通话术。", evidence: "当前 CCO 投诉、挽留流程规则和用户启动指令", instruction: "围绕客户能否接受继续维修，规划一条能查清维修历史、技术方案、三包条件和零件时间的调查路径。", x: 50, y: 15 },
+    { id: "retention", name: "Retention Process", type: "Process Agent", kind: "agent", detail: "我需要回答五个问题：同一故障维修了几次、现在有没有新的维修方案、需要什么零件、是否满足三包条件，以及零件什么时候到。技术方案与三包可以同时核验；库存要等零件号确认后再查。建议把这些事实确认清楚后，再为 Customer Care 生成客户沟通话术。", evidence: "当前 CCO 投诉、挽留流程规则和用户启动指令", instruction: "围绕客户能否接受继续维修，规划一条能查清维修历史、技术方案、三包条件和零件时间的调查路径。", x: 50, y: 15 },
     { id: "technical", name: "Technical Service", type: "Data Agent", kind: "agent", detail: "我对比了五张工单与最新 TSARA。之前的维修没有采用这次的新方案；当前可以更换高压功率控制模块并刷新软件。建议确认方案和零件号，再让 Parts 查询真实库存。", evidence: "5 张维修工单、TSARA SI-61-2026-08、零件号 12-36-8-099-417", instruction: "帮我看看过去五次到底修了什么，是否有新的可执行方案；如果有，把准确零件号一起找出来。", x: 16, y: 48 },
     { id: "legal", name: "Legal Risk Validation", type: "Data Agent", kind: "agent", detail: "我只看了本次核验需要的数据。车辆仍在有效范围内，同一质量问题维修五次，已经超过当前流程的四次阈值。因此三包条件成立，建议由 Legal 确认这项判断。", evidence: "FRD 2025-03-18、FASTA 18,420 km、5 张同故障维修工单", instruction: "只用车辆基础数据和本次维修记录核验三包条件，不要读取客户沟通和其他历史案件。", x: 39, y: 48 },
     { id: "warranty", name: "Warranty & Mobility", type: "Data Agent", kind: "agent", detail: "车辆仍在保，Dealer 当前有代步车，也符合一年延保关怀的申请条件。建议把三项权益一起告诉客户，减少她对维修期间出行和后续风险的担忧。", evidence: "Warranty 有效状态、Dealer 当日代步车库存、延保关怀规则", instruction: "看看客户维修期间有哪些真实可用的保障，不要只返回保修状态，还要确认代步车和可申请的关怀权益。", x: 62, y: 48 },
@@ -115,16 +117,28 @@ const initialConclusion = "我已经听完这通来电。客户描述车辆在�
 
 const initialMessages: Message[] = [
   { id: 1, role: "system", body: "后台处理完成｜来电已转写并完成风险识别", visible: 22 },
-  { id: 2, role: "assistant", body: initialConclusion, visible: initialConclusion.length, tone: "risk", notes: [{ label: "判断依据", text: "行驶中失去动力、同故障维修五次、明确要求退车。", tone: "evidence" }, { label: "建议下一步", text: "创建 CCO 投诉，完整保留原始录音和客户措辞。", tone: "next" }], card: { label: "AI 识别结果", value: "高风险投诉｜退车诉求", meta: "建议立即建案" } },
+  { id: 2, role: "assistant", body: initialConclusion, visible: initialConclusion.length, tone: "risk", notes: [{ label: "判断依据", text: "行驶中失去动力、同故障维修五次、明确要求退车。", tone: "evidence" }, { label: "建议下一步", text: "创建 CCO 投诉，完整保留原始录音和客户措辞。", tone: "next" }], card: { label: "AI 识别结果", value: "高风险投诉｜退车诉求", meta: "建议立即建案" }, actions: ["请创建 CCO 投诉"] },
 ];
 
 const callTranscript = "客户：你好，我的 iX3 刚才行驶中又突然失去动力了。\n\nST：车辆现在停在安全位置吗？人员是否安全？\n\n客户：已经靠边了，人没事。但同一个问题已经修了五次，我现在不敢再开。\n\nST：我先记录车辆和维修情况，并立即升级处理。\n\n客户：我要求退车，请尽快给我一个明确答复。";
 
-const taskItems = [
-  { id: "current", title: "客户要求退车", meta: "BMW iX3 · 高风险", status: "处理中" },
-  { id: "t2", title: "延保资料待补充", meta: "CCA-2026-0041", status: "待处理" },
-  { id: "t3", title: "零件延迟投诉", meta: "CCO-CMP-0087", status: "待处理" },
-  { id: "t4", title: "维修关怀已完成", meta: "CCA-2026-0032", status: "已完成" },
+const pendingTaskItems = [
+  { id: "t2", title: "延保资料待补充｜CCA-2026-0041", status: "待处理" },
+  { id: "t3", title: "零件延迟投诉｜CCO-CMP-0087", status: "待处理" },
+  { id: "t5", title: "道路救援费用核验｜王先生", status: "待处理" },
+  { id: "t6", title: "重复维修客户关怀｜李女士", status: "待处理" },
+  { id: "t7", title: "代步车权益确认｜CCO-CMP-0102", status: "待处理" },
+  { id: "t8", title: "Dealer 沟通记录待补充｜赵先生", status: "待处理" },
+  { id: "t9", title: "维修方案技术复核｜BMW X5", status: "待处理" },
+  { id: "t10", title: "客户授权文件待签署｜CCA-2026-0071", status: "待处理" },
+];
+
+const completedTaskItems = [
+  { id: "c1", title: "维修关怀已完成｜CCA-2026-0032", status: "已完成" },
+  { id: "c2", title: "客户回访已完成｜CCO-CMP-0068", status: "已完成" },
+  { id: "c3", title: "零件加急调拨完成｜刘先生", status: "已完成" },
+  { id: "c4", title: "延保申请审批完成｜CCA-2026-0029", status: "已完成" },
+  { id: "c5", title: "投诉分类与转派完成｜CCO-CMP-0054", status: "已完成" },
 ];
 
 function phaseForStage(stage: Stage): Phase {
@@ -186,10 +200,12 @@ export default function ChatWorkbench() {
   const [agentStates, setAgentStates] = useState<Record<string, AgentStatus>>({ router: "running" });
   const [approvals, setApprovals] = useState({ technical: false, legal: false, parts: false });
   const [partsReady, setPartsReady] = useState(false);
+  const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({});
   const [demoVersion, setDemoVersion] = useState(0);
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const messageEnd = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const initialStarted = useRef(false);
   const remainingStarted = useRef(false);
 
@@ -197,10 +213,11 @@ export default function ChatWorkbench() {
   const displayPhase = graphView ?? phase;
   const readOnlyGraph = graphView !== null && graphView !== phase;
   const progress = progressFor(stage);
-  const waitingA7Feedback = stage === "waiting_customer";
+  const waitingCustomerCareFeedback = stage === "waiting_customer";
   const waitingExternal = ["waiting_repair", "waiting_supplement"].includes(stage);
   const waitingApproval = stage === "waiting_investigation_approvals";
   const canSend = taskView === "main" && !busy && !waitingExternal && !waitingApproval && !["complete", "blocked"].includes(stage);
+  const latestActionMessageId = [...messages].reverse().find((message) => message.actions?.length)?.id;
 
   const graphNodes = useMemo(() => {
     const extras = graphExtras[displayPhase].filter((node) => enabledExtras[displayPhase].includes(node.id));
@@ -240,10 +257,10 @@ export default function ChatWorkbench() {
     return id;
   };
 
-  const streamAssistant = (title: string, body: string, options?: { card?: MessageCard; bullets?: string[]; notes?: MessageNote[]; tone?: Message["tone"]; onDone?: () => void }) => {
+  const streamAssistant = (title: string, body: string, options?: { card?: MessageCard; bullets?: string[]; notes?: MessageNote[]; tone?: Message["tone"]; actions?: string[]; onDone?: () => void }) => {
     const id = nextId.current++;
     setBusy(true);
-    setMessages((current) => [...current, { id, role: "assistant", title, body, bullets: options?.bullets, notes: options?.notes, tone: options?.tone, visible: 0, streaming: true }]);
+    setMessages((current) => [...current, { id, role: "assistant", title, body, bullets: options?.bullets, notes: options?.notes, tone: options?.tone, actions: options?.actions, visible: 0, streaming: true }]);
     let index = 0;
     const tick = () => {
       index += 1;
@@ -279,9 +296,10 @@ export default function ChatWorkbench() {
       card: { label: "Warranty & Mobility", value: "在保｜代步车可用", meta: "建议一年延保" },
       onDone: () => {
         setAgentStates((current) => ({ ...current, warranty: "done", strategy: "running" }));
-        pauseBeforeAgentStep(() => streamAssistant("", "建议 A7 使用下面的话术与客户线下沟通：\n\n“陈女士，我们理解多次维修给您带来的不安。这次 Technical Service 已提供新的维修方案，所需零件预计 3 天到店。等待期间我们提供代步车；维修完成后，再为您申请一年延保。您可以考虑后再告诉我们是否接受。”", {
-          notes: [{ label: "为什么这样说", text: "先回应安全担忧，再给出明确时间和保障，客户会感觉问题被真正理解，而不是再次被要求继续维修。" }, { label: "参考依据", text: "3 个同类高风险案例采用相同结构后，都获得了明确客户反馈。", tone: "evidence" }, { label: "接下来", text: "请 A7 完成线下沟通，再直接在聊天框输入客户反馈。", tone: "next" }],
-          card: { label: "沟通方案", value: "维修＋代步车＋一年延保", meta: "等待 A7 反馈" },
+        pauseBeforeAgentStep(() => streamAssistant("", "建议 Customer Care 使用下面的话术与客户线下沟通：\n\n“陈女士，我们理解多次维修给您带来的不安。这次 Technical Service 已提供新的维修方案，所需零件预计 3 天到店。等待期间我们提供代步车；维修完成后，再为您申请一年延保。您可以考虑后再告诉我们是否接受。”", {
+          notes: [{ label: "为什么这样说", text: "先回应安全担忧，再给出明确时间和保障，客户会感觉问题被真正理解，而不是再次被要求继续维修。" }, { label: "参考依据", text: "3 个同类高风险案例采用相同结构后，都获得了明确客户反馈。", tone: "evidence" }, { label: "接下来", text: "请 Customer Care 完成线下沟通，再直接在聊天框输入客户反馈。", tone: "next" }],
+          card: { label: "沟通方案", value: "维修＋代步车＋一年延保", meta: "等待 Customer Care 反馈" },
+          actions: ["沟通完成，客户接受方案", "客户仍要求退车"],
           onDone: () => {
             setAgentStates((current) => ({ ...current, strategy: "done" }));
             setStage("waiting_customer");
@@ -358,9 +376,7 @@ export default function ChatWorkbench() {
     });
   };
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const value = input.trim();
+  const executeCommand = (value: string) => {
     if (!value || !canSend) return;
     addMessage({ role: "user", body: value });
     setInput("");
@@ -371,14 +387,16 @@ export default function ChatWorkbench() {
       streamAssistant("", "我已经把这通来电整理成 CCO 投诉，客户原话和高风险信号都完整保留了。", {
         notes: [{ label: "为什么按高风险处理", text: "客户描述了行驶中失去动力，并明确提出退车诉求。", tone: "evidence" }, { label: "已经完成", text: "CCO-CMP-2026-0096 创建成功。", tone: "decision" }, { label: "我建议下一步", text: "启动维修挽留流程，先确认有没有不同于前五次维修的新方案。", tone: "next" }],
         card: { label: "CCO Complaint", value: "CCO-CMP-2026-0096", meta: "高风险" },
+        actions: ["启动维修挽留流程"],
       });
     } else if (stage === "ready_retention") {
       completePhase("intake", "retention");
       setAgentStates({ retention: "running", technical: "waiting", legal: "waiting", warranty: "waiting", strategy: "waiting", parts: "waiting" });
       setStage("ready_investigation");
       streamAssistant("", "我会先查清同一故障到底维修了几次、现在有没有不同于以往的可执行方案，以及方案需要哪些零件。与此同时，我会独立核验三包条件；拿到准确零件号后，再确认库存和到货时间。", {
-        notes: [{ label: "这次要回答的问题", text: "维修次数、可执行维修方案、所需零件、是否满足三包条件，以及零件预计何时到店。", tone: "next" }, { label: "我会怎么推进", text: "技术方案与三包核验同时开始；零件库存要等准确零件号确认后再查。" }, { label: "为什么这样安排", text: "先把事实和边界确认清楚，A7 后续给客户的方案才可执行、可信。" }],
+        notes: [{ label: "这次要回答的问题", text: "维修次数、可执行维修方案、所需零件、是否满足三包条件，以及零件预计何时到店。", tone: "next" }, { label: "我会怎么推进", text: "技术方案与三包核验同时开始；零件库存要等准确零件号确认后再查。" }, { label: "为什么这样安排", text: "先把事实和边界确认清楚，Customer Care 后续给客户的方案才可执行、可信。" }],
         card: { label: "当前 Process", value: "客户维修挽留", meta: "6 Agents" },
+        actions: ["按建议运行调查"],
         onDone: () => setAgentStates((current) => ({ ...current, retention: "done" })),
       });
     } else if (stage === "ready_investigation") {
@@ -387,14 +405,14 @@ export default function ChatWorkbench() {
       const rejected = /拒绝|不接受|不认可|仍.*退车|要求退车/.test(value);
       if (rejected) {
         setStage("blocked");
-        streamAssistant("", "收到 A7 的沟通结果。客户仍不接受维修与关怀方案，并继续要求退车；我会保留本次沟通记录，并把案件转入退车流程。", {
+        streamAssistant("", "收到 Customer Care 的沟通结果。客户仍不接受维修与关怀方案，并继续要求退车；我会保留本次沟通记录，并把案件转入退车流程。", {
           notes: [{ label: "反馈依据", text: value, tone: "evidence" }, { label: "处理建议", text: "转交退车流程；该流程不在本 Demo 中继续展开。", tone: "next" }],
           card: { label: "流程结果", value: "转退车流程", meta: "Out of scope" },
         });
       } else {
         setStage("waiting_repair");
         setCcaId("CCA-2026-0068");
-        streamAssistant("", "收到 A7 的沟通结果。客户已接受维修与关怀方案，我已自动更新 CCO 并创建 CCA Case；现在等待 Dealer 上传待审核材料。", {
+        streamAssistant("", "收到 Customer Care 的沟通结果。客户已接受维修与关怀方案，我已自动更新 CCO 并创建 CCA Case；现在等待 Dealer 上传待审核材料。", {
           notes: [{ label: "反馈依据", text: value, tone: "evidence" }, { label: "系统已完成", text: "客户选择已写入 CCO，CCA-2026-0068 已自动创建。", tone: "decision" }, { label: "接下来", text: "等待 Dealer 上传维修单、CLAIM 和客户授权文件。", tone: "next" }],
           card: { label: "CCA Case", value: "CCA-2026-0068", meta: "等待 Dealer 上传材料" },
         });
@@ -406,6 +424,7 @@ export default function ChatWorkbench() {
       streamAssistant("", documentsComplete ? "我已核对 Dealer 上传的申请表、维修完成单和延保文件，VIN、日期与签字一致。" : "我已核对 Dealer 上传的材料，但客户授权签字缺失。", {
         notes: documentsComplete ? [{ label: "我核对过", text: "3 份文件的关键字段一致，维修结论也能对应当前 CCA Case。", tone: "evidence" }, { label: "可以继续", text: "资料完整，建议给出审批意见并回写结果。", tone: "next" }] : [{ label: "我发现", text: "客户授权文件的签字字段为空。", tone: "evidence" }, { label: "暂时不能继续", text: "请等待 Dealer 补充签字文件，系统会自动重新核验。", tone: "next" }],
         card: { label: "OCR 检查", value: documentsComplete ? "资料完整" : "缺少 1 项", meta: documentsComplete ? "建议批准" : "等待补件" },
+        actions: documentsComplete ? ["批准并回写结果"] : undefined,
         onDone: () => {
           setAgentStates((current) => ({ ...current, ocr: "done" }));
           if (!documentsComplete) setStage("waiting_supplement");
@@ -423,6 +442,16 @@ export default function ChatWorkbench() {
     }
   };
 
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    executeCommand(input.trim());
+  };
+
+  const handleFile = (file?: File) => {
+    if (!file) return;
+    addMessage({ role: "system", body: `已添加附件｜${file.name}｜Demo 中不上传真实文件` });
+  };
+
   const submitRepairMock = () => {
     setDealerModal(null);
     setCcaId("CCA-2026-0068");
@@ -438,6 +467,7 @@ export default function ChatWorkbench() {
         pauseBeforeAgentStep(() => streamAssistant("", documentsComplete ? "文档核验完成：申请表、维修完成单和延保文件中的 VIN、日期与签字一致。" : "文档核验发现客户授权签字缺失，暂时不能批准。", {
           notes: documentsComplete ? [{ label: "我看到的", text: "3 份文件中的 VIN、日期、签字和维修结论彼此一致。", tone: "evidence" }, { label: "我的判断", text: "资料足以支持审批。", tone: "decision" }, { label: "建议", text: "请在对话中给出审批意见，确认后我会回写 CCO。", tone: "next" }] : [{ label: "缺少的内容", text: "客户授权文件没有签字。", tone: "evidence" }, { label: "当前判断", text: "资料还不足以支持审批。", tone: "decision" }, { label: "接下来", text: "等待 Dealer 补件，收到后自动重新核验。", tone: "next" }],
           card: { label: "OCR 检查", value: documentsComplete ? "资料完整" : "缺少授权签字", meta: documentsComplete ? "建议批准" : "等待 Dealer 补件" },
+          actions: documentsComplete ? ["批准并回写结果"] : undefined,
           onDone: () => {
             setAgentStates((current) => ({ ...current, ocr: "done" }));
             setStage(documentsComplete ? "ready_approval" : "waiting_supplement");
@@ -453,7 +483,7 @@ export default function ChatWorkbench() {
     setStage("ready_approval");
     addMessage({ role: "system", body: "CCO 回写｜Dealer 已补充客户授权文件" });
     setAgentStates((current) => ({ ...current, ocr: "running" }));
-    streamAssistant("", "Dealer 已经补上客户授权文件。我重新核验后，签字、VIN 和日期都能与当前 CCA Case 对上。", { notes: [{ label: "补件核验", text: "新增文件与案件字段一致。", tone: "evidence" }, { label: "现在可以", text: "资料已经完整，请在对话中给出审批意见。", tone: "next" }], card: { label: "OCR 检查", value: "资料完整", meta: "建议批准" }, onDone: () => setAgentStates((current) => ({ ...current, ocr: "done" })) });
+    streamAssistant("", "Dealer 已经补上客户授权文件。我重新核验后，签字、VIN 和日期都能与当前 CCA Case 对上。", { notes: [{ label: "补件核验", text: "新增文件与案件字段一致。", tone: "evidence" }, { label: "现在可以", text: "资料已经完整，请在对话中给出审批意见。", tone: "next" }], card: { label: "OCR 检查", value: "资料完整", meta: "建议批准" }, actions: ["批准并回写结果"], onDone: () => setAgentStates((current) => ({ ...current, ocr: "done" })) });
   };
 
   const resetDemo = () => {
@@ -474,6 +504,7 @@ export default function ChatWorkbench() {
     setTaskView("main");
     setApprovals({ technical: false, legal: false, parts: false });
     setPartsReady(false);
+    setAgentInstructions({});
     setDemoVersion((current) => current + 1);
     remainingStarted.current = false;
     timers.current.push(setTimeout(() => {
@@ -491,6 +522,10 @@ export default function ChatWorkbench() {
     <main className="chat-app">
       <header className="chat-topbar">
         <Link className="chat-brand" href="/">AFS AI Workbench</Link>
+        <nav className="top-mock-nav" aria-label="主菜单">
+          <button type="button">流程管理</button>
+          <button type="button">权限管理</button>
+        </nav>
         <div className="chat-topbar-spacer" />
         <button className="chat-mobile-button" onClick={() => setDrawer("tasks")} aria-label="打开任务列表"><FlowArrow size={20} /></button>
         <button className="chat-icon-button" aria-label="通知"><Bell size={21} /></button>
@@ -530,8 +565,8 @@ export default function ChatWorkbench() {
               <button onClick={() => setDrawer("agents")} className="chat-mobile-button"><Robot size={18} /> Agents</button>
             </div>
             <div className="chat-messages">
-              {messages.map((message) => <ChatMessage key={`${demoVersion}-${message.id}`} message={message} />)}
-              {waitingA7Feedback && <div className="a7-wait"><Clock size={20} /><div><strong>等待 A7 与客户线下沟通</strong><span>沟通完成后，请在下方直接输入客户是否接受方案。</span></div></div>}
+              {messages.map((message) => <ChatMessage key={`${demoVersion}-${message.id}`} message={message} onAction={executeCommand} actionsDisabled={!canSend || message.id !== latestActionMessageId} />)}
+              {waitingCustomerCareFeedback && <div className="a7-wait"><Clock size={20} /><div><strong>等待 Customer Care 与客户线下沟通</strong><span>沟通完成后，请在下方直接输入客户是否接受方案。</span></div></div>}
               {waitingExternal && <div className="external-wait"><Clock size={20} /><div><strong>等待 Dealer 线下处理</strong><span>请从左侧当前任务使用带 Mock 标识的 CCO 回写。</span></div></div>}
               {waitingApproval && <div className="approval-wait"><Clock size={20} /><div><strong>主任务已暂停</strong><span>请完成左侧仍待处理的跨部门审批任务。</span></div></div>}
               <div ref={messageEnd} />
@@ -540,6 +575,8 @@ export default function ChatWorkbench() {
             <form className="chat-composer" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="chat-command">业务指令</label>
             <div>
+              <button className="file-upload-button" type="button" onClick={() => fileInput.current?.click()} aria-label="上传附件"><Paperclip size={20} /></button>
+              <input ref={fileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { handleFile(event.target.files?.[0]); event.target.value = ""; }} />
               <input
                 id="chat-command"
                 value={input}
@@ -578,6 +615,8 @@ export default function ChatWorkbench() {
         onClose={() => setGraphOpen(false)}
         stage={stage}
         statuses={agentStates}
+        instructionValue={selected ? agentInstructions[selected.id] ?? selected.instruction : ""}
+        onInstructionChange={(value) => selected && setAgentInstructions((current) => ({ ...current, [selected.id]: value }))}
       />}
       {dealerModal && <DealerMockModal
         type={dealerModal}
@@ -591,8 +630,12 @@ export default function ChatWorkbench() {
 }
 
 function TaskSidebar({ stage, taskView, approvals, partsReady, onSelectTask, mockLabel, onMock, onReset, drawer, onClose }: { stage: Stage; taskView: TaskView; approvals: { technical: boolean; legal: boolean; parts: boolean }; partsReady: boolean; onSelectTask: (task: TaskView) => void; mockLabel: string | null; onMock: () => void; onReset: () => void; drawer: boolean; onClose: () => void }) {
-  const currentStatus = stage === "complete" ? "已完成" : stage === "blocked" ? "已转出" : stage === "waiting_investigation_approvals" ? "等待审批" : stage === "waiting_customer" ? "等待 A7" : stage.startsWith("waiting") ? "等待外部" : "处理中";
-  const currentTitle = stage === "classifying" || stage === "ready_create" ? "AI 识别高风险投诉｜陈女士" : stage === "ready_retention" ? "高风险投诉待启动挽留｜陈女士" : ["ready_investigation", "running_investigation"].includes(stage) ? "高风险投诉调查中｜陈女士" : stage === "waiting_investigation_approvals" ? "高风险投诉等待跨部门审批｜陈女士" : stage === "waiting_customer" ? "维修挽留等待 A7 沟通反馈｜陈女士" : stage === "waiting_repair" ? "客户已接受，等待 Dealer 上传材料｜陈女士" : phaseForStage(stage) === "claim" ? "CCA 案件审批｜陈女士｜CCA-2026-0068" : "高风险投诉案件｜陈女士";
+  const [showAll, setShowAll] = useState(false);
+  const [createdTasks, setCreatedTasks] = useState<{ id: string; title: string; status: string }[]>([]);
+  const isStarted = !["classifying", "ready_create", "ready_retention"].includes(stage);
+  const isFinished = ["complete", "blocked"].includes(stage);
+  const currentStatus = !isStarted ? "待处理" : stage === "complete" ? "已完成" : stage === "blocked" ? "已转出" : stage === "waiting_investigation_approvals" ? "等待审批" : stage === "waiting_customer" ? "等待 Customer Care" : stage.startsWith("waiting") ? "等待外部" : "处理中";
+  const currentTitle = stage === "classifying" || stage === "ready_create" ? "AI 识别高风险投诉｜陈女士" : stage === "ready_retention" ? "高风险投诉待启动挽留｜陈女士" : ["ready_investigation", "running_investigation"].includes(stage) ? "高风险投诉调查中｜陈女士" : stage === "waiting_investigation_approvals" ? "高风险投诉等待跨部门审批｜陈女士" : stage === "waiting_customer" ? "维修挽留等待 Customer Care 反馈｜陈女士" : stage === "waiting_repair" ? "客户已接受，等待 Dealer 上传材料｜陈女士" : phaseForStage(stage) === "claim" ? "CCA 案件审批｜陈女士｜CCA-2026-0068" : "高风险投诉案件｜陈女士";
   const approvalTasks: { id: TaskView; title: string }[] = [];
   if (stage === "waiting_investigation_approvals" && !approvals.technical) approvalTasks.push({ id: "technical", title: "审批 Technical Service｜维修方案与零件号" });
   if (stage === "waiting_investigation_approvals" && !approvals.legal) approvalTasks.push({ id: "legal", title: "审批 Legal｜本次三包核验数据" });
@@ -602,17 +645,24 @@ function TaskSidebar({ stage, taskView, approvals, partsReady, onSelectTask, moc
     approvals.legal ? { id: "legal" as TaskView, title: "Legal 已确认｜本次三包核验" } : null,
     approvals.parts ? { id: "parts" as TaskView, title: "Parts 已确认｜库存与调拨时间" } : null,
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
+  const visiblePending = showAll ? [...createdTasks, ...pendingTaskItems] : [...createdTasks, ...pendingTaskItems].slice(0, 4);
+  const visibleCompleted = showAll ? completedTaskItems : completedTaskItems.slice(0, 2);
+  const totalTasks = 1 + pendingTaskItems.length + completedTaskItems.length + approvalTasks.length + completedApprovalTasks.length + createdTasks.length;
+  const createTask = () => setCreatedTasks((current) => current.length ? current : [{ id: "new-demo", title: "新建客户关怀任务｜待补充信息", status: "待处理" }]);
+  const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span>{currentTitle}</span><b>{currentStatus}</b></button>;
   return <aside className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label="任务列表">
-    <header><div><span>任务中心</span><strong>{4 + approvalTasks.length + completedApprovalTasks.length} 个任务</strong></div><button className="drawer-close" onClick={onClose} aria-label="关闭任务列表"><X size={20} /></button></header>
-    <div className="task-section-label">当前任务</div>
-    <button className={`task-list-item primary ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><span>{currentTitle}</span><b>{currentStatus}</b></button>
-    {mockLabel && <button className="mock-task-button" onClick={onMock}><span>MOCK</span>{mockLabel}<ArrowRight size={16} /></button>}
+    <header><div><span>任务中心</span><strong>{totalTasks} 个任务</strong></div><button className="drawer-close" onClick={onClose} aria-label="关闭任务列表"><X size={20} /></button></header>
+    <button className="new-task-button" onClick={createTask}><Plus size={17} />新建任务</button>
+    {isStarted && !isFinished && <><div className="task-section-label">进行中</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}><span>MOCK</span>{mockLabel}<ArrowRight size={16} /></button>}</>}
     <div className="task-section-label">待处理</div>
+    {!isStarted && demoTask}
     {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span>{task.title}</span><b>需审批</b></button>)}
-    {taskItems.slice(1, 3).map((task) => <button className="task-list-item" key={task.id}><span>{task.title}｜{task.meta}</span><b>{task.status}</b></button>)}
-    <div className="task-section-label">最近完成</div>
+    {visiblePending.map((task) => <button className="task-list-item" key={task.id}><span>{task.title}</span><b>{task.status}</b></button>)}
+    <div className="task-section-label">已完成</div>
+    {isFinished && demoTask}
     {completedApprovalTasks.map((task) => <button className={`task-list-item muted ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span>{task.title}</span><b>已审批</b></button>)}
-    <button className="task-list-item muted"><span>{taskItems[3].title}｜{taskItems[3].meta}</span><b>{taskItems[3].status}</b></button>
+    {visibleCompleted.map((task) => <button className="task-list-item muted" key={task.id}><span>{task.title}</span><b>{task.status}</b></button>)}
+    <button className="show-all-tasks" onClick={() => setShowAll((current) => !current)}>{showAll ? "收起任务列表" : `展开完整列表（${totalTasks}）`}<CaretDown size={15} /></button>
     <button className="reset-demo" onClick={onReset}>重新演示</button>
   </aside>;
 }
@@ -636,13 +686,18 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: Exclude<Tas
   ];
   const [reply, setReply] = useState("");
   const [submittedReply, setSubmittedReply] = useState("");
+  const approvalFileInput = useRef<HTMLInputElement>(null);
+  const approveWith = (value: string) => {
+    if (approved) return;
+    setSubmittedReply(value);
+    setReply("");
+    onApprove();
+  };
   const submitApproval = (event: FormEvent) => {
     event.preventDefault();
     const value = reply.trim();
     if (!value || approved) return;
-    setSubmittedReply(value);
-    setReply("");
-    onApprove();
+    approveWith(value);
   };
   return <section className="approval-task" aria-labelledby="approval-task-title">
     <header>
@@ -659,14 +714,14 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: Exclude<Tas
         <div className="approval-ai-notes">{approvalNotes.map((note) => <section key={note.label}><b>{note.label}</b><span>{note.text}</span></section>)}</div>
       </div>
     </article>
+    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} 快捷审批操作`}><button onClick={() => approveWith(`我确认 ${role} 的数据，可以继续`)}>确认数据并继续</button><button onClick={() => setReply("请补充说明证据来源")}>要求补充证据</button></nav>}
     <article className="approval-user-prompt"><UserCircle size={22} /><p>请确认以上数据是否可以用于主案件后续处理。</p></article>
     {submittedReply && <article className="approval-user-reply"><UserCircle size={22} /><p>{submittedReply}</p></article>}
     {approved && <article className="approval-confirmed"><Robot size={22} /><p>收到，我已经记录你的审批意见。这个任务会留在当前页面；主案件正在后台继续处理，你可以稍后从左侧手动切换回去。</p></article>}
     </div>
     <form className="approval-chat-composer" onSubmit={submitApproval}>
-      <label htmlFor={`approval-reply-${type}`}>审批意见</label>
-      <div><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder={approved ? "审批意见已记录" : `例如：我确认 ${role} 的数据，可以继续`} /><button type="submit" disabled={approved || !reply.trim()} aria-label={`发送 ${role} 审批意见`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
-      <span>{approved ? "已完成审批，请从左侧手动切换任务" : "Demo：任意非空回复都会确认本次审批"}</span>
+      <label className="sr-only" htmlFor={`approval-reply-${type}`}>审批意见</label>
+      <div><button className="file-upload-button" type="button" onClick={() => approvalFileInput.current?.click()} disabled={approved} aria-label="上传审批附件"><Paperclip size={20} /></button><input ref={approvalFileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) setReply(`已附加 ${file.name}，我确认 ${role} 的数据，可以继续`); event.target.value = ""; }} /><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder={approved ? "审批意见已记录" : `例如：我确认 ${role} 的数据，可以继续`} /><button type="submit" disabled={approved || !reply.trim()} aria-label={`发送 ${role} 审批意见`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
     </form>
   </section>;
 }
@@ -720,7 +775,7 @@ function CustomerCard({ open, onToggle, ready, ccoId, ccaId, phase }: { open: bo
   </section>;
 }
 
-function ChatMessage({ message }: { message: Message }) {
+function ChatMessage({ message, onAction, actionsDisabled }: { message: Message; onAction: (value: string) => void; actionsDisabled: boolean }) {
   const visibleBody = message.body.slice(0, message.visible);
   return <article className={`chat-message ${message.role} ${message.tone ?? ""}`}>
     {message.role === "assistant" && <span className="message-avatar"><Robot size={18} /></span>}
@@ -733,6 +788,7 @@ function ChatMessage({ message }: { message: Message }) {
       {!message.streaming && message.card && <div className="compact-result"><span>{message.card.label}</span><strong>{message.card.value}</strong>{message.card.meta && <b>{message.card.meta}</b>}</div>}
       {message.tone === "risk" && <CallRecording />}
     </div>
+    {!message.streaming && message.actions?.length && <nav className="message-actions" aria-label="AI 建议操作">{message.actions.map((action) => <button key={action} disabled={actionsDisabled} onClick={() => onAction(action)}>{action}</button>)}</nav>}
   </article>;
 }
 
@@ -820,8 +876,9 @@ function MiniGraph({ nodes, stage, active, statuses }: { nodes: AgentNode[]; sta
   </div>;
 }
 
-function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSelect, onToggleExtra, onClose, stage, statuses }: { phase: Phase; nodes: AgentNode[]; selected?: AgentNode; readOnly: boolean; enabledExtras: string[]; onSelect: (id: string) => void; onToggleExtra: (id: string) => void; onClose: () => void; stage: Stage; statuses: Record<string, AgentStatus> }) {
+function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSelect, onToggleExtra, onClose, stage, statuses, instructionValue, onInstructionChange }: { phase: Phase; nodes: AgentNode[]; selected?: AgentNode; readOnly: boolean; enabledExtras: string[]; onSelect: (id: string) => void; onToggleExtra: (id: string) => void; onClose: () => void; stage: Stage; statuses: Record<string, AgentStatus>; instructionValue: string; onInstructionChange: (value: string) => void }) {
   const selectedStatus = selected?.kind === "agent" ? agentStatus(Math.max(nodes.indexOf(selected), 0), stage, statuses, selected.id) : "done";
+  const metrics = phase === "intake" ? [["92%", "自动分类准确率"], ["3.2 分钟", "平均节省时间"], ["100%", "原话可追溯"]] : phase === "retention" ? [["68%", "人工检索减少"], ["5 个", "自动核验问题"], ["11 分钟", "单案节省时间"]] : [["74%", "资料预审提速"], ["3 份", "自动核验文件"], ["100%", "审批证据留痕"]];
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="agent-modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
       <header><div><span>{readOnly ? "历史编排 · 只读" : "Agent 编排"}</span><h2 id="agent-modal-title">{processDefinitions[phase].title}</h2></div><button onClick={onClose} aria-label="关闭 Agent 编排"><X size={22} /></button></header>
@@ -835,7 +892,7 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             {enabledExtras.includes(node.id) ? <Check size={16} /> : <Plus size={16} />}
           </button>)}
         </aside>
-        <div className="graph-detail-canvas">
+        <div className="graph-center"><div className="graph-detail-canvas">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {nodes.slice(1).map((node) => <line key={node.id} x1={nodes[0].x} y1={nodes[0].y} x2={node.x} y2={node.y} />)}
           </svg>
@@ -848,7 +905,7 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             {node.kind === "agent" ? <Robot size={19} /> : node.kind === "source" ? <Database size={19} /> : <FlowArrow size={19} />}
             <span><strong>{node.name}</strong><small>{node.type}</small></span>
           </button>)}
-        </div>
+        </div><div className="agent-metrics" aria-label="Agent 效率指标">{metrics.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></div>
         <aside className="node-inspector">
           {selected && <>
             <span>节点详情</span>
@@ -856,7 +913,7 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             <h3>{selected.name}</h3>
             <b>{selected.type}</b>
             <dl>
-              <div><dt>它刚刚接到的任务</dt><dd>{selected.instruction}</dd></div>
+              <div><dt>它刚刚接到的任务</dt>{readOnly ? <dd>{instructionValue}</dd> : <textarea aria-label={`编辑 ${selected.name} 的任务`} value={instructionValue} onChange={(event) => onInstructionChange(event.target.value)} />}</div>
               {selected.kind !== "agent" || selectedStatus === "done" ? <>
                 <div><dt>它是怎么回答的</dt><dd>{selected.detail}</dd></div>
                 <div><dt>它参考了这些内容</dt><dd>{selected.evidence}</dd></div>

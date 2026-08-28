@@ -45,5 +45,11 @@ test("production server renders the process workbench", async (context) => {
   assert.match(chatHtml, /客诉接入与分类/);
   assert.match(chatHtml, /Complaint Router/);
   assert.match(chatHtml, /AI 识别高风险投诉｜陈女士/);
+  assert.match(chatHtml, /流程管理/);
+  assert.match(chatHtml, /权限管理/);
+  assert.match(chatHtml, /新建任务/);
+  assert.match(chatHtml, /展开完整列表/);
+  assert.match(chatHtml, /上传附件/);
+  assert.match(chatHtml, /aria-label="AI 建议操作"/);
   assert.doesNotMatch(chatHtml, /A6 DATA APPROVAL/);
 });
