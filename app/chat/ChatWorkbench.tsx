@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import ThemeToggle from "./ThemeToggle";
+import { getAgentCalls, getCallStatus, visibleAgentNodes } from "./agentCalls.mjs";
 import {
   ArrowRight,
   Bell,
@@ -221,8 +223,15 @@ export default function ChatWorkbench() {
 
   const graphNodes = useMemo(() => {
     const extras = graphExtras[displayPhase].filter((node) => enabledExtras[displayPhase].includes(node.id));
-    return [...baseGraphs[displayPhase], ...extras];
-  }, [displayPhase, enabledExtras]);
+    const nodes = [...baseGraphs[displayPhase], ...extras];
+    // Introduce the cross-process handoff only when it starts; retain it afterward.
+    if (displayPhase === "retention") {
+      const positions: Record<string, [number, number]> = { retention: [50, 12], technical: [15, 43], legal: [50, 43], warranty: [85, 43], parts: [15, 75], strategy: [50, 75], frd: [28, 94], "cco-retention": [58, 94] };
+      return visibleAgentNodes([...nodes.map((node) => ({ ...node, x: positions[node.id]?.[0] ?? node.x, y: positions[node.id]?.[1] ?? node.y })), { ...baseGraphs.claim[0], name: "Claim Process", x: 85, y: 88 }], agentStates);
+    }
+    if (displayPhase === "claim") return [...nodes.map((node) => node.id === "claim-process" ? { ...node, name: "Claim Process", x: 50, y: 38 } : node.id === "ocr" || node.id === "writer" ? { ...node, y: 70 } : node), { ...baseGraphs.retention[0], x: 18, y: 15 }];
+    return nodes;
+  }, [displayPhase, enabledExtras, agentStates]);
 
   const selected = graphNodes.find((node) => node.id === selectedNode) ?? graphNodes[0];
 
@@ -391,7 +400,7 @@ export default function ChatWorkbench() {
       });
     } else if (stage === "ready_retention") {
       completePhase("intake", "retention");
-      setAgentStates({ retention: "running", technical: "waiting", legal: "waiting", warranty: "waiting", strategy: "waiting", parts: "waiting" });
+      setAgentStates((current) => ({ ...current, retention: "running", technical: "waiting", legal: "waiting", warranty: "waiting", strategy: "waiting", parts: "waiting", "claim-process": "waiting" }));
       setStage("ready_investigation");
       streamAssistant("", "我会先查清同一故障到底维修了几次、现在有没有不同于以往的可执行方案，以及方案需要哪些零件。与此同时，我会独立核验三包条件；拿到准确零件号后，再确认库存和到货时间。", {
         notes: [{ label: "这次要回答的问题", text: "维修次数、可执行维修方案、所需零件、是否满足三包条件，以及零件预计何时到店。", tone: "next" }, { label: "我会怎么推进", text: "技术方案与三包核验同时开始；零件库存要等准确零件号确认后再查。" }, { label: "为什么这样安排", text: "先把事实和边界确认清楚，Customer Care 后续给客户的方案才可执行、可信。" }],
@@ -419,7 +428,7 @@ export default function ChatWorkbench() {
       }
     } else if (stage === "ready_claim") {
       completePhase("retention", "claim");
-      setAgentStates({ "claim-process": "done", ocr: "running", writer: "waiting" });
+      setAgentStates((current) => ({ ...current, "claim-process": "done", ocr: "running", writer: "waiting" }));
       setStage("ready_approval");
       streamAssistant("", documentsComplete ? "我已核对 Dealer 上传的申请表、维修完成单和延保文件，VIN、日期与签字一致。" : "我已核对 Dealer 上传的材料，但客户授权签字缺失。", {
         notes: documentsComplete ? [{ label: "我核对过", text: "3 份文件的关键字段一致，维修结论也能对应当前 CCA Case。", tone: "evidence" }, { label: "可以继续", text: "资料完整，建议给出审批意见并回写结果。", tone: "next" }] : [{ label: "我发现", text: "客户授权文件的签字字段为空。", tone: "evidence" }, { label: "暂时不能继续", text: "请等待 Dealer 补充签字文件，系统会自动重新核验。", tone: "next" }],
@@ -457,13 +466,13 @@ export default function ChatWorkbench() {
     setCcaId("CCA-2026-0068");
     completePhase("retention", "claim");
     setStage("ready_approval");
-    setAgentStates({ "claim-process": "running", ocr: "waiting", writer: "waiting" });
+    setAgentStates((current) => ({ ...current, "claim-process": "running", ocr: "waiting", writer: "waiting" }));
     addMessage({ role: "system", body: "DealerRepairAndClaimSubmitted｜Dealer 已上传待审核材料" });
-    streamAssistant("", "Dealer 已上传维修单、CLAIM 和客户授权材料。我已自动启动 CCA 审批 Process Agent，不需要再次输入指令。", {
+    streamAssistant("", "Dealer 已上传维修单、CLAIM 和客户授权材料。挽留 Process Agent 正通过 A2A 将 CCA Case 和待审核材料交给 Claim Process Agent，自动启动审批流程。", {
       notes: [{ label: "刚刚发生了什么", text: "系统收到 DealerRepairAndClaimSubmitted 事件。", tone: "evidence" }, { label: "我会自动完成", text: "先做 OCR 核验，再等待审批意见，最后回写 CCO。", tone: "next" }, { label: "为什么直接启动", text: "CCA Case 已存在，Dealer 的待审核材料也已经到齐。" }],
       card: { label: "CCA Case", value: "CCA-2026-0068", meta: "审批 Process 已启动" },
       onDone: () => {
-        setAgentStates({ "claim-process": "done", ocr: "running", writer: "waiting" });
+        setAgentStates((current) => ({ ...current, "claim-process": "done", ocr: "running", writer: "waiting" }));
         pauseBeforeAgentStep(() => streamAssistant("", documentsComplete ? "文档核验完成：申请表、维修完成单和延保文件中的 VIN、日期与签字一致。" : "文档核验发现客户授权签字缺失，暂时不能批准。", {
           notes: documentsComplete ? [{ label: "我看到的", text: "3 份文件中的 VIN、日期、签字和维修结论彼此一致。", tone: "evidence" }, { label: "我的判断", text: "资料足以支持审批。", tone: "decision" }, { label: "建议", text: "请在对话中给出审批意见，确认后我会回写 CCO。", tone: "next" }] : [{ label: "缺少的内容", text: "客户授权文件没有签字。", tone: "evidence" }, { label: "当前判断", text: "资料还不足以支持审批。", tone: "decision" }, { label: "接下来", text: "等待 Dealer 补件，收到后自动重新核验。", tone: "next" }],
           card: { label: "OCR 检查", value: documentsComplete ? "资料完整" : "缺少授权签字", meta: documentsComplete ? "建议批准" : "等待 Dealer 补件" },
@@ -527,6 +536,7 @@ export default function ChatWorkbench() {
           <button type="button">权限管理</button>
         </nav>
         <div className="chat-topbar-spacer" />
+        <ThemeToggle />
         <button className="chat-mobile-button" onClick={() => setDrawer("tasks")} aria-label="打开任务列表"><FlowArrow size={20} /></button>
         <button className="chat-icon-button" aria-label="通知"><Bell size={21} /></button>
         <button className="chat-profile" aria-label="账户"><UserCircle size={22} /></button>
@@ -840,6 +850,7 @@ function AgentWorkspace({ phase, currentPhase, nodes, readOnly, onExpand, onOpen
       <MiniGraph nodes={nodes} stage={stage} active={phase === currentPhase} statuses={statuses} />
       <span><CornersOut size={16} />展开编排</span>
     </button>
+    <AgentCallList phase={phase} nodes={nodes} statuses={statuses} onSelect={onOpenNode} compact />
     <div className="agent-list-heading"><span>Agents</span><b>{nodes.filter((node) => node.kind === "agent").length}</b></div>
     <div className="agent-list">
       {nodes.filter((node) => node.kind === "agent").map((node, index) => {
@@ -856,7 +867,7 @@ function AgentWorkspace({ phase, currentPhase, nodes, readOnly, onExpand, onOpen
 }
 
 function agentStatus(index: number, stage: Stage, statuses?: Record<string, AgentStatus>, nodeId?: string): AgentStatus {
-  if (nodeId && statuses?.[nodeId]) return statuses[nodeId];
+  if (nodeId) return statuses?.[nodeId] ?? "waiting";
   if (["classifying", "ready_investigation", "ready_claim"].includes(stage)) return index === 0 ? "running" : "waiting";
   if (["ready_solution", "ready_approval", "waiting_supplement"].includes(stage)) return index <= 1 ? "done" : index === 2 ? "running" : "done";
   if (["waiting_customer", "waiting_repair", "complete", "blocked", "ready_retention", "ready_create"].includes(stage)) return "done";
@@ -867,16 +878,33 @@ function statusLabel(status: AgentStatus) {
   return status === "done" ? "完成" : status === "running" ? "运行中" : "等待";
 }
 
+function callStatusLabel(status: AgentStatus) {
+  return status === "done" ? "已返回" : status === "running" ? "调用中" : "待调用";
+}
+
+function AgentCallList({ phase, nodes, statuses, onSelect, compact = false }: { phase: Phase; nodes: AgentNode[]; statuses: Record<string, AgentStatus>; onSelect: (id: string) => void; compact?: boolean }) {
+  const calls = getAgentCalls(phase, nodes).filter((call) => call.protocol === "MCP" || call.protocol === "A2A");
+  if (!calls.length) return null;
+  const dataCalls = calls.filter((call) => call.protocol === "MCP");
+  const visible = compact ? calls.filter((call) => call.protocol === "A2A") : calls;
+  return <section className={`agent-call-list ${compact ? "compact" : ""}`} aria-label="Agent 调用关系">
+    <header>调用链路 <small>Mock</small></header>
+    {compact && dataCalls.length > 0 && <button onClick={() => onSelect(dataCalls.find((call) => getCallStatus(call, statuses) === "running")?.target ?? dataCalls[0].target)}><b className="protocol-badge mcp">MCP</b><span>Retention Process → Data Agents<small>{dataCalls.filter((call) => getCallStatus(call, statuses) === "done").length}/{dataCalls.length} 已返回 · {dataCalls.filter((call) => getCallStatus(call, statuses) === "running").length} 调用中</small></span></button>}
+    {visible.map((call) => <button key={call.id} onClick={() => onSelect(call.target)}><b className={`protocol-badge ${call.protocol.toLowerCase()}`}>{call.protocol}</b><span>{call.sourceName} → {call.targetName}<small>{callStatusLabel(getCallStatus(call, statuses))}</small></span></button>)}
+  </section>;
+}
+
 function MiniGraph({ nodes, stage, active, statuses }: { nodes: AgentNode[]; stage: Stage; active: boolean; statuses: Record<string, AgentStatus> }) {
   const visible = nodes.filter((node) => node.kind === "agent");
-  return <div className="mini-graph" aria-hidden="true">
+  return <div className="mini-graph" aria-hidden="true" data-current={active}>
     <div className="mini-root"><FlowArrow size={17} /></div>
     <i />
-    <div className="mini-nodes">{visible.slice(0, 6).map((node, index) => <span key={node.id} className={active ? agentStatus(index, stage, statuses, node.id) : "done"}><Robot size={14} /><b>{node.type.replace(" Agent", "")}</b></span>)}</div>
+    <div className="mini-nodes">{visible.map((node, index) => <span key={node.id} className={agentStatus(index, stage, statuses, node.id)}><Robot size={14} /><b>{node.type.replace(" Agent", "")}</b></span>)}</div>
   </div>;
 }
 
 function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSelect, onToggleExtra, onClose, stage, statuses, instructionValue, onInstructionChange }: { phase: Phase; nodes: AgentNode[]; selected?: AgentNode; readOnly: boolean; enabledExtras: string[]; onSelect: (id: string) => void; onToggleExtra: (id: string) => void; onClose: () => void; stage: Stage; statuses: Record<string, AgentStatus>; instructionValue: string; onInstructionChange: (value: string) => void }) {
+  const calls = getAgentCalls(phase, nodes);
   const selectedStatus = selected?.kind === "agent" ? agentStatus(Math.max(nodes.indexOf(selected), 0), stage, statuses, selected.id) : "done";
   const metrics = phase === "intake" ? [["92%", "自动分类准确率"], ["3.2 分钟", "平均节省时间"], ["100%", "原话可追溯"]] : phase === "retention" ? [["68%", "人工检索减少"], ["5 个", "自动核验问题"], ["11 分钟", "单案节省时间"]] : [["74%", "资料预审提速"], ["3 份", "自动核验文件"], ["100%", "审批证据留痕"]];
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -892,10 +920,12 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             {enabledExtras.includes(node.id) ? <Check size={16} /> : <Plus size={16} />}
           </button>)}
         </aside>
-        <div className="graph-center"><div className="graph-detail-canvas">
+        <div className="graph-center"><div className="graph-scroll"><div className="graph-detail-canvas protocol-canvas">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {nodes.slice(1).map((node) => <line key={node.id} x1={nodes[0].x} y1={nodes[0].y} x2={node.x} y2={node.y} />)}
+            <defs><marker id="call-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 6 3 L 0 6 z" fill="context-stroke" /></marker></defs>
+            {calls.map((call) => <path key={call.id} className={`call-edge ${call.protocol.toLowerCase()} ${getCallStatus(call, statuses)}`} d={call.route.map(([x, y], index) => `${index ? "L" : "M"} ${x} ${y}`).join(" ")} markerEnd="url(#call-arrow)" />)}
           </svg>
+          {calls.map((call) => <button key={call.id} className={`call-edge-label ${call.protocol.toLowerCase()} ${getCallStatus(call, statuses)}`} style={{ left: `${call.label[0]}%`, top: `${call.label[1]}%` }} onClick={() => onSelect(call.target)} aria-label={`${call.sourceName} 通过 ${call.protocol} 调用 ${call.targetName}，${callStatusLabel(getCallStatus(call, statuses))}，查看详情`}>{call.protocol}<span>{getCallStatus(call, statuses) === "running" ? "调用中" : getCallStatus(call, statuses) === "done" ? "✓" : "待调用"}</span></button>)}
           {nodes.map((node, index) => <button
             key={node.id}
             onClick={() => onSelect(node.id)}
@@ -905,7 +935,7 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             {node.kind === "agent" ? <Robot size={19} /> : node.kind === "source" ? <Database size={19} /> : <FlowArrow size={19} />}
             <span><strong>{node.name}</strong><small>{node.type}</small></span>
           </button>)}
-        </div><div className="agent-metrics" aria-label="Agent 效率指标">{metrics.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></div>
+        </div></div><AgentCallList phase={phase} nodes={nodes} statuses={statuses} onSelect={onSelect} /><div className="agent-metrics" aria-label="Agent 效率指标">{metrics.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></div>
         <aside className="node-inspector">
           {selected && <>
             <span>节点详情</span>
@@ -913,6 +943,13 @@ function AgentGraphModal({ phase, nodes, selected, readOnly, enabledExtras, onSe
             <h3>{selected.name}</h3>
             <b>{selected.type}</b>
             <dl>
+              {calls.filter((call) => call.target === selected.id || call.source === selected.id).map((call) => <div className="agent-call-record" key={call.id}>
+                <dt>{call.protocol} · {callStatusLabel(getCallStatus(call, statuses))} · Mock</dt>
+                <dd>{call.sourceName} → {call.targetName}</dd>
+                <dd><code>{call.command}</code></dd>
+                <dd>{getCallStatus(call, statuses) === "waiting" ? "计划输入" : "请求输入"}：{call.input}</dd>
+                <dd>{getCallStatus(call, statuses) === "waiting" ? (call.protocol === "A2A" ? "客户接受方案且 Dealer 上传材料后，才会委派审批任务。" : "尚未发送调用，不展示返回结果。") : getCallStatus(call, statuses) === "running" ? "请求已发出，正在等待 Agent 返回。" : "Agent 已返回；点击对应节点查看结果和依据。"}</dd>
+              </div>)}
               <div><dt>它刚刚接到的任务</dt>{readOnly ? <dd>{instructionValue}</dd> : <textarea aria-label={`编辑 ${selected.name} 的任务`} value={instructionValue} onChange={(event) => onInstructionChange(event.target.value)} />}</div>
               {selected.kind !== "agent" || selectedStatus === "done" ? <>
                 <div><dt>它是怎么回答的</dt><dd>{selected.detail}</dd></div>

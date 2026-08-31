@@ -1,0 +1,381 @@
+/* ============================================================
+   APPLE LIQUID GLASS — DESIGN TOKENS (CSS Variables)
+   ============================================================
+   设计来源:
+     - Apple 官网 apple.com.cn（实测提取：导航/配色/排版/页脚）
+     - Apple Liquid Glass 设计语言（iOS 26 / macOS Tahoe, WWDC25）
+   用途:
+     - 供 AI / 前端直接读取并复用的设计系统参数
+     - 语义化命名 + 分组 + 注释，机器可解析、人类可阅读
+   使用方式:
+     1) 引入本文件，html 上挂 class="lg-glass" 等基类即可用
+     2) 或仅取 :root 变量到你的项目里二次定制
+   命名规范:
+     --apple-*  : 苹果基础视觉（色板/字体/形状）
+     --lg-*     : Liquid Glass 玻璃材质专用参数
+     --lg-*-(hover|active|enter) : 交互态
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1. 色彩系统 COLOR SYSTEM
+   苹果官方色板，强调色唯一（Action Blue）
+   ------------------------------------------------------------ */
+:root {
+  /* 画布背景层级 */
+  --apple-bg-black: #000000;          /* 纯黑画布（暗色主背景） */
+  --apple-bg-black-2: #0a0a0a;        /* 第二层深灰黑 */
+  --apple-bg-black-3: #141414;        /* 第三层深色 */
+  --apple-bg-parchment: #f5f5f7;      /* 浅灰纸色（亮色板块） */
+  --apple-bg-pearl: #fafafc;          /* 珍珠白（导航等） */
+
+  /* 文本层级（深色背景） */
+  --apple-text-primary: #ffffff;      /* 主文本 */
+  --apple-text-secondary: #f5f5f7;    /* 次级文本 */
+  --apple-text-tertiary: #d2d2d7;     /* 辅助/占位文本 */
+  /* 文本（浅色背景） */
+  --apple-ink: #1d1d1f;               /* 苹果墨色（浅色背景正文） */
+  --apple-ink-secondary: #6e6e73;     /* 浅色背景次级文本 */
+  --apple-ink-tertiary: #86868b;      /* 浅色背景辅助文本 */
+
+  /* 强调色 Action Blue（唯一交互色，禁止第二品牌色） */
+  --apple-blue: #0066cc;              /* 主 CTA / 链接（浅色玻璃上） */
+  --apple-blue-focus: #0071e3;        /* 浅色玻璃上的 focus ring / hover */
+  --apple-blue-on-dark: #2997ff;      /* 深色玻璃 / 深色区块上的链接 */
+
+  /* 背景氛围渐变（暗色画布上的纵深光晕） */
+  --apple-bg-ambient-blue: rgba(41, 151, 255, 0.08);   /* 苹果蓝氛围 */
+  --apple-bg-ambient-blue-2: rgba(41, 151, 255, 0.06);
+  --apple-bg-ambient-purple: rgba(175, 82, 222, 0.05); /* 紫色点缀 */
+
+  /* 发丝分隔线 */
+  --apple-hairline: rgba(0, 0, 0, 0.08);  /* 亮色分隔线 */
+  --apple-hairline-dark: rgba(255, 255, 255, 0.12); /* 暗色分隔线 */
+}
+
+/* ------------------------------------------------------------
+   2. 字体与排版 TYPOGRAPHY
+   ------------------------------------------------------------ */
+:root {
+  /* 字体栈（顺序即优先级） */
+  --apple-font-display:
+    "SF Pro Display", "SF Pro Text", system-ui, -apple-system,
+    BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --apple-font-body:
+    "SF Pro Text", system-ui, -apple-system,
+    BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* 字号 / 字重 / 行高 */
+  --apple-font-size-hero: 56px;       /* 首屏大标题 */
+  --apple-font-size-h1: 48px;         /* 一级标题 */
+  --apple-font-size-h2: 40px;         /* 二级标题 */
+  --apple-font-size-h3: 28px;         /* 三级标题 */
+  --apple-font-size-body: 17px;       /* 正文 */
+  --apple-font-size-nav: 12px;        /* 导航/工具文字 */
+  --apple-font-size-caption: 14px;    /* 说明文字 */
+
+  --apple-font-weight-heading: 600;   /* 标题字重 */
+  --apple-font-weight-body: 400;      /* 正文字重 */
+  --apple-font-weight-em: 600;        /* 强调正文 */
+
+  --apple-line-height-body: 1.47;     /* 正文行高 */
+  --apple-letter-spacing: 0;          /* 苹果式紧凑排版，字距归零 */
+}
+
+/* ------------------------------------------------------------
+   3. 圆角系统 RADIUS
+   ------------------------------------------------------------ */
+:root {
+  --lg-radius-sm: 12px;        /* 标签 / 徽章 */
+  --lg-radius-md: 20px;        /* 按钮 / 小组件 */
+  --lg-radius-lg: 36px;        /* 液态玻璃卡片（特征大圆角） */
+  --lg-radius-pill: 9999px;    /* 胶囊 CTA / 搜索框 / 分段控件 */
+}
+
+/* ------------------------------------------------------------
+   4. 阴影系统 SHADOW（三层结构：外深 + 中过渡 + 内高光）
+   ------------------------------------------------------------ */
+:root {
+  --lg-shadow-glass:
+    0 20px 40px rgba(0, 0, 0, 0.5),              /* 外层深阴影（悬浮感） */
+    0 8px 16px rgba(0, 0, 0, 0.3),               /* 中层过渡阴影 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);      /* 内层顶部高光 */
+  --lg-shadow-glass-dark:
+    0 20px 40px rgba(0, 0, 0, 0.6),
+    0 8px 16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --lg-shadow-surface: 0 10px 30px rgba(0, 0, 0, 0.12);   /* 内容卡阴影 */
+  --lg-shadow-elevated: 0 18px 60px rgba(0, 0, 0, 0.20);  /* 弹层/悬浮条阴影 */
+}
+
+/* ------------------------------------------------------------
+   5. 液态玻璃材质 LIQUID GLASS MATERIAL（核心）
+   透明度 / 背景处理 / 边缘光 / 光泽层 / 波纹
+   ------------------------------------------------------------ */
+:root {
+  /* 玻璃透明度（动态 4%~12%，基础 8%） */
+  --lg-glass-alpha: 0.08;              /* 基础玻璃透明度 */
+  --lg-glass-alpha-light: 0.04;        /* 轻玻璃 */
+  --lg-glass-alpha-strong: 0.12;       /* 强玻璃 */
+
+  /* 背景处理：模糊 + 饱和度 + 亮度 */
+  --lg-backdrop-blur: blur(40px) saturate(180%);   /* 标准玻璃 */
+  --lg-backdrop-blur-strong: blur(60px) saturate(200%); /* 强玻璃 */
+  --lg-blur: 40px;                     /* 模糊半径（标准） */
+  --lg-saturate: 180%;                 /* 饱和度增强（提亮透过色） */
+
+  /* 边缘光（模拟玻璃边缘折射亮边） */
+  --lg-edge-highlight: rgba(255, 255, 255, 0.2);    /* 玻璃边框/边缘光 */
+  --lg-edge-highlight-strong: rgba(255, 255, 255, 0.72); /* 浅色高光边缘 */
+  --lg-edge-highlight-dark: rgba(255, 255, 255, 0.18);   /* 深色模式边缘 */
+
+  /* 高光扫光层（顶部径向高光） */
+  --lg-specular-top:
+    radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.42), transparent 32%);
+
+  /* 光泽流动层（135° 线性渐变，overlay 混合） */
+  --lg-sheen:
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.03) 45%,
+      rgba(255, 255, 255, 0.08) 55%,
+      rgba(255, 255, 255, 0.15) 100%);
+  --lg-sheen-opacity: 0.5;             /* 光泽层透明度 */
+  --lg-sheen-blend: overlay;           /* 光泽混合模式 */
+
+  /* 色散 / 折射点缀（边缘红蓝双色） */
+  --lg-chromatic:
+    linear-gradient(135deg,
+      rgba(255, 0, 100, 0.03) 0%,      /* 红色偏移 */
+      transparent 50%,
+      rgba(0, 150, 255, 0.03) 100%);   /* 蓝色偏移 */
+  --lg-chromatic-blur: blur(8px);
+}
+
+/* ------------------------------------------------------------
+   6. 动效与交互 MOTION & INTERACTION
+   ------------------------------------------------------------ */
+:root {
+  /* 缓动曲线：苹果弹簧感 */
+  --lg-ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --lg-ease-ripple: cubic-bezier(0.25, 0.46, 0.45, 0.94); /* 波纹扩散 */
+
+  /* 时长 */
+  --lg-duration-fast: 150ms;
+  --lg-duration-normal: 300ms;
+  --lg-duration-slow: 500ms;
+  --lg-duration-ripple: 600ms;          /* 悬停波纹扩散时长 */
+
+  /* 交互态位移 */
+  --lg-hover-lift: -2px;                /* 卡片悬停上浮 */
+  --lg-press-scale: 0.97;               /* 按钮按下缩放 */
+
+  /* 元素进入动画（淡入 + 上浮 + 缩放 + 由模糊到清晰） */
+  --lg-enter-from: translateY(10px) scale(0.96);
+  --lg-enter-opacity: 0;
+  --lg-enter-blur: blur(2px);
+}
+
+/* ------------------------------------------------------------
+   7. 布局与尺寸 LAYOUT & SIZING
+   ------------------------------------------------------------ */
+:root {
+  --apple-nav-height: 44px;             /* 全局导航高度 */
+  --apple-subnav-height: 52px;          /* 产品子导航高度 */
+  --apple-touch-target: 44px;           /* 最小触控目标 */
+  --apple-content-max: 980px;           /* 内容区最大宽度 */
+  --apple-gutter: 22px;                 /* 内容区左右留白 */
+  --apple-section-space: 80px;          /* 板块垂直间距 */
+}
+
+/* ------------------------------------------------------------
+   8. 暗色模式 DARK MODE（系统级自动适配）
+   ------------------------------------------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --apple-bg-canvas: #000000;
+    --lg-glass-alpha: 0.06;                          /* 玻璃更透明 */
+    --lg-edge-highlight: rgba(255, 255, 255, 0.18);  /* 边缘光减弱 */
+    --lg-shadow-glass: var(--lg-shadow-glass-dark);   /* 阴影更深 */
+  }
+}
+/* 显式主题切换（页面内 toggle 时把 data-theme="dark" 挂到 <html>） */
+:root[data-theme="dark"] {
+  --apple-bg-canvas: #000000;
+  --lg-glass-alpha: 0.06;
+  --lg-edge-highlight: rgba(255, 255, 255, 0.18);
+  --lg-shadow-glass: var(--lg-shadow-glass-dark);
+}
+
+/* ------------------------------------------------------------
+   9. 响应式降级 RESPONSIVE DEGRADATION
+   移动端降低模糊与圆角，提升性能、保证可读性
+   ------------------------------------------------------------ */
+@media (max-width: 768px) {
+  :root {
+    --lg-backdrop-blur: blur(30px) saturate(160%);
+    --lg-backdrop-blur-strong: blur(45px) saturate(180%);
+    --lg-blur: 30px;
+    --lg-saturate: 160%;
+    --lg-radius-lg: 28px;              /* 大圆角收小 */
+    --lg-sheen-opacity: 0.3;           /* 光泽层透明度降低 */
+    --apple-font-size-hero: 34px;      /* 大标题收小 */
+    --apple-font-size-h1: 30px;
+    --apple-font-size-h2: 28px;
+  }
+}
+
+/* 无障碍：减少动态偏好时关闭动画 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   10. 可直接复用的玻璃基类 BASE COMPONENTS
+   组合 :root 变量生成 Apple Liquid Glass 组件
+   ============================================================ */
+
+/* --- 液态玻璃卡片（核心示例：含全部材质层） --- */
+.lg-glass {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--lg-radius-lg);
+  background: rgba(255, 255, 255, var(--lg-glass-alpha));
+  -webkit-backdrop-filter: var(--lg-backdrop-blur);
+  backdrop-filter: var(--lg-backdrop-blur);
+  border: 1px solid var(--lg-edge-highlight);
+  box-shadow: var(--lg-shadow-glass);
+  color: var(--apple-text-primary);
+  transform: translateZ(0);            /* GPU 硬件加速 */
+  will-change: transform;
+  transition:
+    transform var(--lg-duration-normal) var(--lg-ease-spring),
+    box-shadow var(--lg-duration-normal) var(--lg-ease-spring);
+}
+/* 顶部高光扫光层 */
+.lg-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--lg-specular-top);
+  mix-blend-mode: screen;
+  opacity: 0.75;
+}
+/* 135° 光泽流动层 */
+.lg-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--lg-sheen);
+  mix-blend-mode: var(--lg-sheen-blend);
+  opacity: var(--lg-sheen-opacity);
+}
+/* 悬停：上浮 + 阴影加深 */
+.lg-glass:hover {
+  transform: translateY(var(--lg-hover-lift));
+  box-shadow: var(--lg-shadow-elevated);
+}
+
+/* --- 流动波纹（悬停时从中心扩散的光晕） --- */
+.lg-ripple::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06) 0%, transparent 60%);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity var(--lg-duration-ripple) var(--lg-ease-ripple),
+              transform var(--lg-duration-ripple) var(--lg-ease-ripple);
+}
+.lg-ripple:hover::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* --- 主 CTA（蓝色胶囊，含玻璃高光） --- */
+.lg-button-primary {
+  min-height: var(--apple-touch-target);
+  padding: 11px 22px;
+  border-radius: var(--lg-radius-pill);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 42%),
+              var(--apple-blue-on-dark);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 8px 20px rgba(0, 102, 204, 0.24);
+  transition: transform var(--lg-duration-fast) var(--lg-ease-spring);
+}
+.lg-button-primary:active {
+  transform: scale(var(--lg-press-scale));
+}
+
+/* --- 次级玻璃按钮 --- */
+.lg-button-glass {
+  min-height: var(--apple-touch-target);
+  padding: 10px 16px;
+  border-radius: var(--lg-radius-pill);
+  background: rgba(255, 255, 255, 0.15);
+  -webkit-backdrop-filter: var(--lg-backdrop-blur);
+  backdrop-filter: var(--lg-backdrop-blur);
+  border: 1px solid var(--lg-edge-highlight);
+  color: var(--apple-text-primary);
+}
+
+/* --- 全局导航（薄玻璃 chrome） --- */
+.lg-global-nav {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  height: var(--apple-nav-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--apple-gutter);
+  background: rgba(250, 250, 252, 0.8);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--apple-hairline);
+  font-size: var(--apple-font-size-nav);
+}
+
+/* --- 元素进入动画 --- */
+.lg-animate-in {
+  animation: lg-enter var(--lg-duration-normal) var(--lg-ease-spring) both;
+}
+@keyframes lg-enter {
+  from {
+    opacity: var(--lg-enter-opacity);
+    transform: var(--lg-enter-from);
+    filter: var(--lg-enter-blur);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ============================================================
+   附：参数速查表（AI 快速对照）
+   ------------------------------------------------------------
+   背景画布     : #000000 / #0a0a0a / #f5f5f7 / #fafafc
+   主文本       : #ffffff(暗) / #1d1d1f(亮)
+   强调色(唯一) : #2997ff(暗) / #0066cc·#0071e3(亮)
+   玻璃透明度   : 0.08（4%~12% 动态）
+   背景处理     : blur(40px) saturate(180%)（移动 blur 30px / 160%）
+   边缘光       : rgba(255,255,255,0.2)
+   圆角         : 36px 卡片 / 20px 按钮 / 12px 标签 / 9999px 胶囊
+   阴影         : 外 0 20px 40px(.5) + 中 0 8px 16px(.3) + 内 inset 0 1px 0(.1)
+   光泽层       : 135° 渐变 + overlay 混合 + 透明度 0.5
+   波纹         : 悬停中心扩散 radial-gradient，0.6s 缓动
+   动效         : cubic-bezier(0.22,1,0.36,1)；悬停上浮 -2px；按下 scale(0.97)
+   ============================================================ */
+

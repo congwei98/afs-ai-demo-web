@@ -1,0 +1,45 @@
+/* Theme roles reference the user's original palette; the source stays immutable.
+   Light is the default. Explicit selection takes precedence over OS dark mode. */
+.chat-app {
+  --chat-scheme:light;
+  --chat-canvas:var(--apple-bg-parchment);
+  --chat-surface:var(--apple-bg-pearl);
+  --chat-inset:var(--apple-bg-parchment);
+  --chat-text:var(--apple-ink);
+  --chat-secondary:var(--apple-ink);
+  --chat-muted:var(--apple-ink-secondary);
+  --chat-accent:var(--apple-blue);
+  --chat-focus:var(--apple-blue-focus);
+  --chat-line:var(--apple-hairline);
+  --chat-edge:var(--lg-edge-highlight-strong);
+  --chat-shadow:var(--lg-shadow-surface);
+  --chat-alpha:0.08;
+  --chat-glass:rgba(255,255,255,var(--chat-alpha));
+}
+:root[data-chat-theme="dark"] .chat-app {
+  --chat-scheme:dark;
+  --chat-canvas:var(--apple-bg-black);
+  --chat-surface:var(--apple-bg-black-2);
+  --chat-inset:var(--apple-bg-black-3);
+  --chat-text:var(--apple-text-primary);
+  --chat-secondary:var(--apple-text-secondary);
+  --chat-muted:var(--apple-text-tertiary);
+  --chat-accent:var(--apple-blue-on-dark);
+  --chat-focus:var(--apple-blue-on-dark);
+  --chat-line:var(--apple-hairline-dark);
+  --chat-edge:var(--lg-edge-highlight-dark);
+  --chat-shadow:var(--lg-shadow-glass-dark);
+  --chat-alpha:0.06;
+}
+.chat-topbar .theme-toggle {
+  flex-shrink:0; min-height:var(--apple-touch-target); min-width:var(--apple-touch-target);
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:0 10px; border:1px solid var(--apple-hairline);
+  border-radius:var(--lg-radius-pill); color:var(--apple-ink);
+  background:rgba(255,255,255,.15);
+}
+@media (max-width:640px) {
+  .chat-topbar { gap:6px; padding-inline:12px; }
+  .chat-topbar .theme-toggle { padding:0; }
+  .theme-toggle span { display:none; }
+}
