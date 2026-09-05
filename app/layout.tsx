@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import "./globals.css";
 import { themeBootstrap } from "./chat/theme.mjs";
 
 export const metadata: Metadata = {
-  title: "AFS Process Management Center",
-  description: "AFS-wide AI-assisted process workbench demo.",
+  title: "AFS AI Chat Workbench",
+  description: "AI-assisted aftersales customer complaint demo.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

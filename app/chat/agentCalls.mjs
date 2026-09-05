@@ -11,19 +11,21 @@ export function visibleAgentNodes(nodes, statuses) {
 }
 
 const retentionCalls = [
-  { source: "retention", target: "technical", protocol: "MCP", command: "tools/call · technical_investigation", input: "CCO-CMP-2026-0096 · VIN · 维修工单", route: [[50, 12], [50, 27], [15, 27], [15, 36]], label: [15, 28] },
-  { source: "retention", target: "legal", protocol: "MCP", command: "tools/call · legal_risk_validation", input: "车辆基础数据 · 同故障维修记录（不含客户沟通历史）", route: [[50, 12], [50, 36]], label: [50, 29] },
-  { source: "retention", target: "warranty", protocol: "MCP", command: "tools/call · warranty_mobility", input: "VIN · Dealer · 在保状态及关怀权益", route: [[50, 12], [50, 27], [85, 27], [85, 36]], label: [85, 28] },
-  { source: "retention", target: "parts", protocol: "MCP", command: "tools/call · parts_availability", input: "Technical Service 已确认的零件号 12-36-8-099-417", route: [[50, 12], [3, 12], [3, 68], [15, 68]], label: [7, 56] },
-  { source: "retention", target: "strategy", protocol: "编排", command: "生成客户沟通建议", input: "已确认的技术、三包、零件与关怀结论", route: [[50, 12], [68, 12], [68, 68], [50, 68]], label: [68, 56] },
+  { source: "retention", target: "repair-history", protocol: "MCP", command: "tools/call · repair_history", input: "CCO-CMP-2026-0096 · VIN · 购车日附近维修工单", route: [[50, 12], [50, 27], [15, 27], [15, 36]], label: [15, 28] },
+  { source: "retention", target: "technical", protocol: "MCP", command: "tools/call · technical_service", input: "VIN · 已登记维修方案", route: [[50, 12], [50, 36]], label: [39, 29] },
+  { source: "retention", target: "mobility", protocol: "MCP", command: "tools/call · mobility_availability", input: "Dealer · 未来一周代步车", route: [[50, 12], [50, 27], [63, 27], [63, 36]], label: [63, 28] },
+  { source: "retention", target: "warranty", protocol: "MCP", command: "tools/call · warranty_status", input: "VIN · FRD 保修开始日 · 当前里程", route: [[50, 12], [50, 27], [85, 27], [85, 36]], label: [85, 28] },
+  { source: "retention", target: "customer-care", protocol: "编排", command: "生成客户补偿方案与沟通话术", input: "已审批的维修、代步车与 Warranty 结果", route: [[50, 12], [50, 68]], label: [50, 54] },
   { source: "retention", target: "claim-process", protocol: "A2A", command: "委派 CCA 审批任务", input: "CCA-2026-0068 · DealerRepairAndClaimSubmitted · 待审核材料", route: [[50, 12], [97, 12], [97, 88], [85, 88]], label: [94, 76] },
 ];
 
 /** @param {string} phase @param {{id: string, name: string, x: number, y: number, kind: string}[]} nodes */
 export function getAgentCalls(phase, nodes) {
   const find = (id) => nodes.find((node) => node.id === id);
-  const known = phase === "retention" ? retentionCalls : phase === "claim" ? [
-    { ...retentionCalls[5], route: [[18, 15], [50, 15], [50, 31]], label: [35, 15] },
+  const known = phase === "intake" ? [
+    { source: "router", target: "cco-execution", protocol: "编排", command: "创建 CCO 投诉案件", input: "已识别的客户投诉与原始录音", route: [[50, 52], [50, 74]], label: [50, 63] },
+  ] : phase === "retention" ? retentionCalls : phase === "claim" ? [
+    { source: "retention", target: "claim-process", protocol: "A2A", command: "委派 CCA 审批任务", input: "CCA-2026-0068 · DealerRepairAndClaimSubmitted · 待审核材料", route: [[18, 15], [50, 15], [50, 31]], label: [35, 15] },
     { source: "claim-process", target: "ocr", protocol: "编排", command: "核验 CLAIM 文件", input: "Dealer 上传的申请表、维修单和授权文件", route: [[50, 38], [28, 63]], label: [36, 51] },
     { source: "claim-process", target: "writer", protocol: "编排", command: "审批完成后回写 CCO", input: "Approved 审批决定 · CCA-2026-0068", route: [[50, 38], [72, 63]], label: [64, 51] },
   ] : [];

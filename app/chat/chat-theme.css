@@ -1,5 +1,12 @@
 /* Theme roles reference the user's original palette; the source stays immutable.
    Light is the default. Explicit selection takes precedence over OS dark mode. */
+html,body {
+  width:100%;
+  height:100%;
+  margin:0;
+  overflow:hidden;
+}
+.chat-app,.chat-app *,.chat-app *::before,.chat-app *::after { box-sizing:border-box; }
 .chat-app {
   --chat-scheme:light;
   --chat-canvas:var(--apple-bg-parchment);
@@ -15,6 +22,18 @@
   --chat-shadow:var(--lg-shadow-surface);
   --chat-alpha:0.08;
   --chat-glass:rgba(255,255,255,var(--chat-alpha));
+  --chat-panel:color-mix(in srgb,var(--apple-bg-pearl) 66%,transparent);
+  --chat-card:color-mix(in srgb,var(--apple-bg-pearl) 58%,transparent);
+  --chat-card-hover:color-mix(in srgb,var(--apple-bg-pearl) 82%,transparent);
+  --chat-glow:color-mix(in srgb,var(--apple-blue-on-dark) 18%,transparent);
+  --chat-aurora:color-mix(in srgb,var(--apple-blue-on-dark) 20%,transparent);
+  --chat-panel-shadow:0 22px 55px color-mix(in srgb,var(--apple-ink) 12%,transparent),inset 0 1px 0 var(--lg-edge-highlight-strong);
+  --chat-card-shadow:0 10px 30px color-mix(in srgb,var(--apple-ink) 8%,transparent),inset 0 1px 0 color-mix(in srgb,var(--apple-bg-pearl) 82%,transparent);
+  /* Sampled from AFS_AI_Workbench_Liquid_Glass_Simplified_Light.png. */
+  --chat-reference-bg-top:rgb(232 241 252);
+  --chat-reference-bg-middle:rgb(237 242 249);
+  --chat-reference-bg-bottom:rgb(205 208 248);
+  --chat-reference-bg-side:rgb(216 228 252);
 }
 :root[data-chat-theme="dark"] .chat-app {
   --chat-scheme:dark;
@@ -27,19 +46,223 @@
   --chat-accent:var(--apple-blue-on-dark);
   --chat-focus:var(--apple-blue-on-dark);
   --chat-line:var(--apple-hairline-dark);
-  --chat-edge:var(--lg-edge-highlight-dark);
+  --chat-edge:color-mix(in srgb,var(--lg-edge-highlight-dark) 76%,var(--apple-blue-on-dark));
   --chat-shadow:var(--lg-shadow-glass-dark);
   --chat-alpha:0.06;
+  --chat-panel:color-mix(in srgb,var(--apple-bg-black-2) 58%,transparent);
+  --chat-card:color-mix(in srgb,var(--apple-bg-black-3) 68%,transparent);
+  --chat-card-hover:color-mix(in srgb,var(--apple-bg-black-3) 92%,transparent);
+  --chat-glow:color-mix(in srgb,var(--apple-blue-on-dark) 22%,transparent);
+  --chat-aurora:color-mix(in srgb,var(--apple-blue-on-dark) 24%,transparent);
+  --chat-panel-shadow:0 24px 64px color-mix(in srgb,var(--apple-bg-black) 72%,transparent),0 0 32px color-mix(in srgb,var(--apple-blue-on-dark) 8%,transparent),inset 0 1px 0 var(--lg-edge-highlight-dark);
+  --chat-card-shadow:0 12px 32px color-mix(in srgb,var(--apple-bg-black) 48%,transparent),inset 0 1px 0 var(--lg-edge-highlight-dark);
+  /* Sampled from AFS_AI_Workbench_Liquid_Glass_Simplified_Dark.png. */
+  --chat-reference-bg-top:rgb(0 1 6);
+  --chat-reference-bg-middle:rgb(8 12 21);
+  --chat-reference-bg-bottom:rgb(3 4 18);
+  --chat-reference-bg-side:rgb(2 6 26);
 }
-.chat-topbar .theme-toggle {
+
+/* High-fidelity reference: luminous ambient canvas behind three floating panes. */
+.chat-app {
+  background-color:var(--chat-canvas);
+  background-image:
+    radial-gradient(ellipse at -4% 10%,var(--chat-reference-bg-side),transparent 42%),
+    radial-gradient(ellipse at 103% 102%,var(--chat-reference-bg-bottom),transparent 46%),
+    radial-gradient(ellipse at 70% 104%,var(--apple-bg-ambient-purple),transparent 30%),
+    radial-gradient(ellipse at 86% 108%,var(--apple-bg-ambient-purple),transparent 34%),
+    linear-gradient(135deg,var(--chat-reference-bg-top),var(--chat-reference-bg-middle) 55%,var(--chat-reference-bg-bottom));
+  width:100%;
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+  background-attachment:fixed;
+}
+.chat-app::before,.chat-app::after {
+  content:"";
+  position:fixed;
+  z-index:0;
+  pointer-events:none;
+  border-radius:var(--lg-radius-pill);
+  filter:blur(60px);
+  transform:translateZ(0);
+}
+.chat-app::before {
+  width:54vw;
+  height:30vw;
+  right:-16vw;
+  bottom:-12vw;
+  background:
+    radial-gradient(circle at 25% 35%,var(--apple-bg-ambient-purple),transparent 44%),
+    radial-gradient(circle at 64% 55%,var(--chat-aurora),transparent 58%);
+}
+.chat-app::after {
+  width:38vw;
+  height:24vw;
+  left:-18vw;
+  top:4vw;
+  background:radial-gradient(circle,var(--chat-aurora),transparent 68%);
+}
+.chat-layout { position:relative; z-index:1; }
+:root[data-chat-theme="dark"] .chat-app {
+  background-image:
+    radial-gradient(ellipse at -2% 8%,var(--chat-reference-bg-side),transparent 38%),
+    radial-gradient(ellipse at 104% 100%,var(--chat-reference-bg-bottom),transparent 44%),
+    radial-gradient(ellipse at 72% 105%,var(--apple-bg-ambient-purple),transparent 27%),
+    radial-gradient(ellipse at 88% 110%,var(--apple-bg-ambient-purple),transparent 34%),
+    linear-gradient(135deg,var(--chat-reference-bg-top),var(--chat-reference-bg-middle) 58%,var(--chat-reference-bg-bottom));
+}
+:root[data-chat-theme="dark"] .chat-app::before { filter:blur(76px); }
+:root[data-chat-theme="dark"] .chat-app::after { filter:blur(82px); }
+
+/* The navigation follows the selected glass mode while retaining its content. */
+.chat-topbar {
+  height:60px;
+  min-height:60px;
+  color-scheme:var(--chat-scheme);
+  color:var(--chat-text);
+  background:color-mix(in srgb,var(--chat-surface) 78%,transparent);
+  border-color:var(--chat-line);
+  box-shadow:0 8px 30px color-mix(in srgb,var(--chat-canvas) 12%,transparent),inset 0 -1px 0 var(--chat-edge);
+}
+.chat-brand { font-size:22px; letter-spacing:-.025em; }
+.chat-brand,.chat-topbar button,.chat-topbar .theme-toggle,.chat-topbar .language-toggle { color:var(--chat-text); }
+.chat-topbar button { font-size:14px; }
+.top-mock-nav { padding:4px; border:1px solid var(--chat-line); border-radius:var(--lg-radius-pill); background:var(--chat-card); box-shadow:var(--chat-card-shadow); }
+.top-mock-nav button { border-radius:var(--lg-radius-pill); }
+.top-mock-nav button.selected { color:var(--chat-accent); background:var(--chat-card-hover); box-shadow:var(--chat-card-shadow); }
+.chat-topbar button:hover { color:var(--chat-accent); background:var(--chat-card); }
+.chat-profile,.chat-topbar .theme-toggle,.chat-topbar .language-toggle { border-color:var(--chat-line); background:var(--chat-card); }
+
+/* Primary panes and dialogs share the thick, floating glass treatment in both references. */
+:is(.task-sidebar,.agent-workspace,.process-tracker,.customer-card,.chat-thread,.chat-composer,.approval-task,.agent-modal,.dealer-modal) {
+  background:var(--chat-panel);
+  border-color:var(--chat-edge);
+  box-shadow:var(--chat-panel-shadow);
+}
+.task-sidebar,.agent-workspace { border-radius:28px; }
+.process-tracker,.customer-card,.chat-thread,.chat-composer,.approval-task { border-radius:24px; }
+.agent-modal,.dealer-modal { border-radius:28px; }
+.chat-layout {
+  width:100%;
+  height:calc(100dvh - 60px);
+  min-height:0;
+  padding:0;
+  gap:0;
+  overflow:hidden;
+}
+.chat-main {
+  width:100%;
+  max-width:none;
+  min-width:0;
+  min-height:0;
+  padding:10px 0;
+  gap:10px;
+  justify-self:stretch;
+  overflow:hidden;
+}
+.task-sidebar,.agent-workspace { height:100%; min-height:0; }
+.process-tracker,.customer-card,.chat-thread,.chat-composer { width:100%; min-width:0; }
+.chat-thread,.chat-messages { min-height:0; }
+.task-sidebar>header strong,.agent-workspace>header strong { font-size:20px; }
+.task-sidebar>header span,.agent-workspace>header span,.task-section-label,.agent-list-heading { font-size:13px; }
+.task-list-item>span { font-size:15px; }
+.task-list-item>b { font-size:13px; }
+.process-tracker>header span { font-size:13px; }
+.process-tracker>header strong { font-size:16px; }
+.process-tracker li>b { font-size:13px; }
+.customer-card button strong { font-size:19px; }
+.customer-card dd { font-size:17px; }
+.customer-card button small,.customer-card dt,.customer-card button b,.customer-card button i { font-size:13px; }
+.chat-thread-heading b { font-size:16px; }
+.chat-thread-heading small { font-size:13px; }
+.chat-message p,.approval-recommendation p,.approval-user-prompt p,.approval-user-reply p,.approval-confirmed p { font-size:18px; line-height:1.55; }
+.chat-message.system p { font-size:15px; }
+.chat-message ul,.ai-notes p,.ai-result,.approval-ai-notes p { font-size:15px; line-height:1.5; }
+.compact-result strong,.external-wait strong,.approval-wait strong,.a7-wait strong,.mock-receipt strong { font-size:16px; }
+.compact-result span,.compact-result b,.recording-meta,.recording-transcript>b,.external-wait span,.approval-wait span,.a7-wait span,.mock-receipt span { font-size:13px; }
+.recording-transcript p { font-size:15px; }
+.agent-list strong { font-size:16px; }
+.agent-list small,.agent-result-button>b { font-size:13px; }
+.agent-library>span,.node-inspector>span,.node-inspector dt,.agent-library>p { font-size:13px; }
+.agent-library>button,.node-inspector dd { font-size:15px; }
+.agent-library>button small,.graph-node small,.agent-metrics span,.agent-modal>footer span { font-size:13px; }
+.graph-node strong,.agent-call-list>header,.agent-call-list>button>span { font-size:15px; }
+.node-inspector h3 { font-size:20px; }
+.node-inspector textarea { font-size:17px; line-height:1.5; }
+
+/* Nested cards need visible depth, not flat transparency. */
+:is(.task-list-item,.mock-task-button,.agent-mini-map,.agent-list,.agent-call-list,.compact-result,.call-recording,.recording-transcript,.graph-node,.agent-library>button,.agent-metrics>div,.dealer-modal fieldset label) {
+  background:var(--chat-card);
+  border-color:var(--chat-line);
+  box-shadow:var(--chat-card-shadow);
+}
+.chat-app :is(.task-list-item,.agent-result-button,.agent-library>button,.dealer-modal fieldset label):hover:not(:disabled) {
+  background:var(--chat-card-hover);
+  border-color:var(--chat-edge);
+}
+.task-list-item.active {
+  background:linear-gradient(135deg,var(--chat-glow),var(--chat-card));
+  border-color:var(--chat-accent);
+  box-shadow:0 0 0 1px var(--chat-glow),var(--chat-card-shadow);
+}
+.new-task-button {
+  min-height:48px;
+  box-shadow:inset 0 1px 0 var(--lg-edge-highlight-strong),0 10px 24px color-mix(in srgb,var(--apple-blue) 28%,transparent);
+}
+.chat-message>div,.approval-recommendation,.approval-confirmed p,.chat-message.user>div,.approval-user-reply p,.approval-user-prompt p {
+  background:var(--chat-card);
+  border-color:var(--chat-line);
+  box-shadow:var(--chat-card-shadow);
+}
+.chat-message.assistant>div,.approval-recommendation {
+  background:linear-gradient(135deg,var(--chat-glow),var(--chat-card) 48%);
+}
+.chat-composer input,.approval-chat-composer input,.node-inspector textarea {
+  background:var(--chat-card);
+  border-color:var(--chat-edge);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--apple-bg-pearl) 38%,transparent);
+}
+.chat-app .agent-mini-map,.graph-detail-canvas {
+  background-color:var(--chat-card);
+  background-image:radial-gradient(var(--chat-line) 1px,transparent 1px),radial-gradient(circle at 50% 15%,var(--chat-glow),transparent 52%);
+  background-size:18px 18px,100% 100%;
+}
+.agent-result-button { border-color:var(--chat-line); }
+.agent-status,.customer-avatar,.message-avatar,.approval-ai-icon,.inspector-icon,.chat-thread-heading>div>span {
+  box-shadow:inset 0 1px 0 var(--chat-edge),0 6px 18px var(--chat-glow);
+}
+.agent-modal,.dealer-modal {
+  background:color-mix(in srgb,var(--chat-surface) 88%,transparent);
+}
+.chat-modal-backdrop {
+  background:color-mix(in srgb,var(--apple-bg-black) 52%,transparent);
+}
+
+@media (max-width:920px) {
+  .chat-layout { padding:10px; }
+  .chat-main { height:calc(100dvh - 60px - 20px); }
+  .task-sidebar,.agent-workspace { top:60px; height:calc(100dvh - 60px); background:color-mix(in srgb,var(--chat-surface) 90%,transparent); }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .chat-app::before,.chat-app::after { display:none; }
+}
+.chat-topbar .theme-toggle,.chat-topbar .language-toggle {
   flex-shrink:0; min-height:var(--apple-touch-target); min-width:var(--apple-touch-target);
   display:inline-flex; align-items:center; justify-content:center; gap:6px;
   padding:0 10px; border:1px solid var(--apple-hairline);
   border-radius:var(--lg-radius-pill); color:var(--apple-ink);
   background:rgba(255,255,255,.15);
 }
+.chat-topbar .language-toggle span { font-weight:700; }
+.chat-topbar .language-toggle b { font-size:12px; font-weight:500; }
+/* Approval results use the same open chat treatment as the main task. */
+.approval-recommendation { padding:0; border:0; background:transparent; box-shadow:none; }
+.approval-recommendation p + p { margin-top:10px; }
+.approval-message-actions { margin-left:0; }
 @media (max-width:640px) {
   .chat-topbar { gap:6px; padding-inline:12px; }
   .chat-topbar .theme-toggle { padding:0; }
+  .chat-topbar .language-toggle b { display:none; }
   .theme-toggle span { display:none; }
 }
