@@ -326,7 +326,16 @@ function ChatWorkbenchContent() {
   }, []);
 
   useEffect(() => {
-    messageEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (!drawer) return;
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.querySelector<HTMLElement>(drawer === "tasks" ? ".task-sidebar .drawer-close" : ".agent-workspace .drawer-close")?.focus();
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setDrawer(null); origin?.focus(); } };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [drawer]);
+
+  useEffect(() => {
+    messageEnd.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "end" });
   }, [messages]);
 
   const addMessage = (message: Omit<Message, "id" | "visible">) => {
@@ -620,7 +629,7 @@ function ChatWorkbenchContent() {
         <div className="chat-topbar-spacer" />
         <LanguageToggle />
         <ThemeToggle />
-        <button className="chat-mobile-button" onClick={() => setDrawer("tasks")} aria-label={t("打开任务列表")}><FlowArrow size={20} /></button>
+        <button className="chat-mobile-button" aria-expanded={drawer === "tasks"} aria-controls="workbench-tasks" onClick={() => setDrawer(drawer === "tasks" ? null : "tasks")} aria-label={t("打开任务列表")}><FlowArrow size={20} /></button>
         <button className="chat-icon-button" aria-label={t("通知")}><Bell size={21} /></button>
         <button className="chat-profile" aria-label={t("账户")}><UserCircle size={22} /></button>
       </header>
@@ -763,7 +772,7 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
     onCreateTask();
   };
   const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span>{t(currentTitle)}</span><b>{t(currentStatus)}</b></button>;
-  return <aside className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label={t("任务列表")}>
+  return <aside id="workbench-tasks" className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label={t("任务列表")}>
     <header><div><span>{t("任务中心")}</span><strong>{totalTasks}{t(" 个任务")}</strong></div><button className="drawer-close" onClick={onClose} aria-label={t("关闭任务列表")}><X size={20} /></button></header>
     <button className="new-task-button" onClick={createTask}><Plus size={17} />{t("新建任务")}</button>
     {isStarted && !isFinished && <><div className="task-section-label">{t("进行中")}</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}><span>MOCK</span>{t(mockLabel)}<ArrowRight size={16} /></button>}</>}
@@ -1033,13 +1042,41 @@ function MiniGraph({ nodes, stage, active, statuses }: { nodes: AgentNode[]; sta
   </div>;
 }
 
+// Keep modal keyboard navigation inside the active task and restore its origin.
+function useDialogFocus(onClose: () => void) {
+  const ref = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = ref.current;
+    if (!dialog) return;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')).filter((element) => element.getClientRects().length > 0);
+    (focusable()[0] ?? dialog).focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeRef.current(); }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first) { event.preventDefault(); dialog.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    };
+    dialog.addEventListener("keydown", handleKey);
+    return () => { dialog.removeEventListener("keydown", handleKey); if (origin?.isConnected) origin.focus(); };
+  }, []);
+  return ref;
+}
+
 function AgentGraphModal({ phase, title, nodes, selected, readOnly, enabledExtras, onSelect, onToggleExtra, onClose, stage, statuses, instructionValue, onInstructionChange }: { phase: Phase; title: string; nodes: AgentNode[]; selected?: AgentNode; readOnly: boolean; enabledExtras: string[]; onSelect: (id: string) => void; onToggleExtra: (id: string) => void; onClose: () => void; stage: Stage; statuses: Record<string, AgentStatus>; instructionValue: string; onInstructionChange: (value: string) => void }) {
   const { t } = useLanguage();
+  const dialogRef = useDialogFocus(onClose);
   const calls = getAgentCalls(phase, nodes);
   const selectedStatus = selected?.kind === "agent" ? agentStatus(Math.max(nodes.indexOf(selected), 0), stage, statuses, selected.id) : "done";
   const metrics = phase === "intake" ? [["92%", "自动分类准确率"], ["3.2 分钟", "平均节省时间"], ["100%", "原话可追溯"]] : phase === "retention" ? [["68%", "人工检索减少"], ["5 个", "自动核验问题"], ["11 分钟", "单案节省时间"]] : [["74%", "资料预审提速"], ["3 份", "自动核验文件"], ["100%", "审批证据留痕"]];
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="agent-modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+    <section ref={dialogRef} tabIndex={-1} className="agent-modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
       <header><div><span>{readOnly ? `${t("历史记录")} · ${t("只读")}` : t("AI Agent编排器")}</span><h2 id="agent-modal-title">{t(title)}</h2></div><button onClick={onClose} aria-label={t("关闭 Agent 编排")}><X size={22} /></button></header>
       <div className="agent-modal-layout">
         <aside className="agent-library">
@@ -1098,9 +1135,10 @@ function AgentGraphModal({ phase, title, nodes, selected, readOnly, enabledExtra
 
 function DealerMockModal({ type, documentsComplete, onDocumentsComplete, onClose, onSubmit }: { type: "repair" | "supplement"; documentsComplete: boolean; onDocumentsComplete: (value: boolean) => void; onClose: () => void; onSubmit: () => void }) {
   const { t } = useLanguage();
+  const dialogRef = useDialogFocus(onClose);
   const title = type === "repair" ? "维修与 CLAIM 回写" : "Dealer 补件回写";
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="dealer-modal" role="dialog" aria-modal="true" aria-labelledby="dealer-modal-title">
+    <section ref={dialogRef} tabIndex={-1} className="dealer-modal" role="dialog" aria-modal="true" aria-labelledby="dealer-modal-title">
       <header><div><span>MOCK · CCO EVENT</span><h2 id="dealer-modal-title">{t(title)}</h2></div><button onClick={onClose} aria-label={t("关闭 Mock 回写")}><X size={22} /></button></header>
       {type === "repair" && <><div className="mock-receipt"><Wrench size={22} /><div><strong>{t("车辆维修与一年延保已完成")}</strong><span>{t("Dealer 将维修单和 CLAIM 文件回写 CCO。")}</span></div></div><fieldset><legend>{t("演示资料状态")}</legend><label className={documentsComplete ? "selected" : ""}><input type="radio" checked={documentsComplete} onChange={() => onDocumentsComplete(true)} /><span><FileText size={20} /><b>{t("资料完整")}</b><small>{t("进入正常审批")}</small></span></label><label className={!documentsComplete ? "selected" : ""}><input type="radio" checked={!documentsComplete} onChange={() => onDocumentsComplete(false)} /><span><WarningCircle size={20} /><b>{t("缺少授权签字")}</b><small>{t("演示补件路径")}</small></span></label></fieldset></>}
       {type === "supplement" && <div className="mock-receipt"><FileText size={22} /><div><strong>{t("客户授权文件已补充")}</strong><span>{t("提交后将重新触发 OCR 审核。")}</span></div></div>}
