@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import { LanguageProvider, LanguageToggle, useLanguage } from "./i18n";
+import { layoutOrchestration, nodeExecution } from "./orchestration.mjs";
 import { getAgentCalls, getCallStatus, visibleAgentNodes } from "./agentCalls.mjs";
 import {
   ArrowRight,
@@ -608,7 +609,7 @@ function ChatWorkbenchContent() {
     repairQueryTimer.current = setTimeout(() => { setRepairQueryStatus("done"); repairQueryTimer.current = null; }, 1800);
   };
 
-  const mockLabel = stage === "waiting_repair" ? "模拟维修与 CLAIM 回写" : stage === "waiting_supplement" ? "模拟 Dealer 补件" : null;
+  const mockLabel = stage === "waiting_repair" ? "维修与 CLAIM 回写" : stage === "waiting_supplement" ? "提交 Dealer 补件" : null;
   const activeApproval = taskView === "main" || taskView === "repair-query" ? null : taskView;
   const activeApprovalDone = activeApproval ? approvals[activeApproval] : false;
   const approveActiveTask = () => {
@@ -682,7 +683,7 @@ function ChatWorkbenchContent() {
             <div className="chat-messages">
               {messages.map((message) => <ChatMessage key={message.id} message={message} onAction={executeCommand} actionsDisabled={!canSend || message.id !== latestActionMessageId} />)}
               {waitingCustomerCareFeedback && <div className="a7-wait"><Clock size={20} /><div><strong>{t("等待 Customer Care 与客户线下沟通")}</strong><span>{t("沟通完成后，请在下方直接输入客户是否接受方案。")}</span></div></div>}
-              {waitingExternal && <div className="external-wait"><Clock size={20} /><div><strong>{t("等待 Dealer 线下处理")}</strong><span>{t("请从左侧当前任务使用带 Mock 标识的 CCO 回写。")}</span></div></div>}
+              {waitingExternal && <div className="external-wait"><Clock size={20} /><div><strong>{t("等待 Dealer 线下处理")}</strong><span>{t("请从左侧当前任务提交 CCO 回写。")}</span></div></div>}
               {waitingApproval && <div className="approval-wait"><Clock size={20} /><div><strong>{t("主任务已暂停")}</strong><span>{t("请完成左侧仍待处理的跨部门审批任务。")}</span></div></div>}
               <div ref={messageEnd} />
             </div>
@@ -746,7 +747,13 @@ function ChatWorkbenchContent() {
 }
 
 function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, repairQueryStatus, repairQueryRequest, repairQueryVehicle, mockLabel, onMock, drawer, onClose }: { stage: Stage; taskView: TaskView; approvals: { "repair-history": boolean; technical: boolean; mobility: boolean; warranty: boolean; legal: boolean; parts: boolean }; onSelectTask: (task: TaskView) => void; onCreateTask: () => void; repairQueryStatus: AgentStatus | null; repairQueryRequest: string | null; repairQueryVehicle: string; mockLabel: string | null; onMock: () => void; drawer: boolean; onClose: () => void }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+  const compactStatus = (status: string) => {
+    if (["已完成", "已审批"].includes(status)) return locale === "en" ? "Done" : "完成";
+    if (status === "已转出") return locale === "en" ? "Routed" : "转出";
+    if (status === "处理中") return locale === "en" ? "Running" : "处理中";
+    return locale === "en" ? "Waiting" : "等待";
+  };
   const [showAll, setShowAll] = useState(false);
   const [createdTasks, setCreatedTasks] = useState<{ id: string; title: string; status: string }[]>([]);
   const isStarted = !["classifying", "ready_create", "ready_retention"].includes(stage);
@@ -771,19 +778,19 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
     setCreatedTasks((current) => current.length ? current : [{ id: "repair-query", title: "新建任务", status: "待处理" }]);
     onCreateTask();
   };
-  const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span>{t(currentTitle)}</span><b>{t(currentStatus)}</b></button>;
+  const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span title={t(currentTitle)}>{t(currentTitle)}</span><b title={t(currentStatus)}>{compactStatus(currentStatus)}</b></button>;
   return <aside id="workbench-tasks" className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label={t("任务列表")}>
     <header><div><span>{t("任务中心")}</span><strong>{totalTasks}{t(" 个任务")}</strong></div><button className="drawer-close" onClick={onClose} aria-label={t("关闭任务列表")}><X size={20} /></button></header>
     <button className="new-task-button" onClick={createTask}><Plus size={17} />{t("新建任务")}</button>
-    {isStarted && !isFinished && <><div className="task-section-label">{t("进行中")}</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}><span>MOCK</span>{t(mockLabel)}<ArrowRight size={16} /></button>}</>}
+    {isStarted && !isFinished && <><div className="task-section-label">{t("进行中")}</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}>{t(mockLabel)}<ArrowRight size={16} /></button>}</>}
     <div className="task-section-label">{t("待处理")}</div>
     {!isStarted && demoTask}
-    {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span>{t(task.title)}</span><b>{t("需审批")}</b></button>)}
-    {visiblePending.map((task) => <button className={`task-list-item ${task.id === "repair-query" && taskView === "repair-query" ? "active" : ""}`} key={task.id} onClick={() => task.id === "repair-query" && onSelectTask("repair-query")}><span>{task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}</span><b>{t(task.id === "repair-query" ? repairQueryStatus === "done" ? "已完成" : repairQueryStatus === "running" ? "处理中" : task.status : task.status)}</b></button>)}
+    {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("需审批")}>{compactStatus("需审批")}</b></button>)}
+    {visiblePending.map((task) => <button className={`task-list-item ${task.id === "repair-query" && taskView === "repair-query" ? "active" : ""}`} key={task.id} onClick={() => task.id === "repair-query" && onSelectTask("repair-query")}><span title={task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}>{task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}</span><b>{compactStatus(task.id === "repair-query" ? repairQueryStatus === "done" ? "已完成" : repairQueryStatus === "running" ? "处理中" : task.status : task.status)}</b></button>)}
     <div className="task-section-label">{t("已完成")}</div>
     {isFinished && demoTask}
-    {completedApprovalTasks.map((task) => <button className={`task-list-item muted ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span>{t(task.title)}</span><b>{t("已审批")}</b></button>)}
-    {visibleCompleted.map((task) => <button className="task-list-item muted" key={task.id}><span>{t(task.title)}</span><b>{t(task.status)}</b></button>)}
+    {completedApprovalTasks.map((task) => <button className={`task-list-item muted ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("已审批")}>{compactStatus("已审批")}</b></button>)}
+    {visibleCompleted.map((task) => <button className="task-list-item muted" key={task.id}><span title={t(task.title)}>{t(task.title)}</span><b title={t(task.status)}>{compactStatus(task.status)}</b></button>)}
     <button className="show-all-tasks" onClick={() => setShowAll((current) => !current)}>{showAll ? t("收起任务列表") : `${t("展开完整列表")} (${totalTasks})`}<CaretDown size={15} /></button>
   </aside>;
 }
@@ -1027,7 +1034,7 @@ function AgentCallList({ phase, nodes, statuses, onSelect, compact = false }: { 
   const dataCalls = calls.filter((call) => call.protocol === "MCP");
   const visible = compact ? calls.filter((call) => call.protocol === "A2A") : calls;
   return <section className={`agent-call-list ${compact ? "compact" : ""}`} aria-label={t("Agent 调用关系")}>
-    <header>{t("调用链路")} <small>Mock</small></header>
+    <header>{t("调用链路")}</header>
     {compact && dataCalls.length > 0 && <button onClick={() => onSelect(dataCalls.find((call) => getCallStatus(call, statuses) === "running")?.target ?? dataCalls[0].target)}><b className="protocol-badge mcp">MCP</b><span>Retention Process → Data Agents<small>{dataCalls.filter((call) => getCallStatus(call, statuses) === "done").length}/{dataCalls.length} {t("已返回")} · {dataCalls.filter((call) => getCallStatus(call, statuses) === "running").length} {t("调用中")}</small></span></button>}
     {visible.map((call) => <button key={call.id} onClick={() => onSelect(call.target)}><b className={`protocol-badge ${call.protocol.toLowerCase()}`}>{call.protocol}</b><span>{call.sourceName} → {call.targetName}<small>{t(callStatusLabel(getCallStatus(call, statuses)))}</small></span></button>)}
   </section>;
@@ -1073,62 +1080,64 @@ function AgentGraphModal({ phase, title, nodes, selected, readOnly, enabledExtra
   const { t } = useLanguage();
   const dialogRef = useDialogFocus(onClose);
   const calls = getAgentCalls(phase, nodes);
-  const selectedStatus = selected?.kind === "agent" ? agentStatus(Math.max(nodes.indexOf(selected), 0), stage, statuses, selected.id) : "done";
-  const metrics = phase === "intake" ? [["92%", "自动分类准确率"], ["3.2 分钟", "平均节省时间"], ["100%", "原话可追溯"]] : phase === "retention" ? [["68%", "人工检索减少"], ["5 个", "自动核验问题"], ["11 分钟", "单案节省时间"]] : [["74%", "资料预审提速"], ["3 份", "自动核验文件"], ["100%", "审批证据留痕"]];
+  const selectedStatus = selected ? statuses[selected.id] ?? "waiting" : "waiting";
+  const graph = layoutOrchestration(phase, nodes, calls);
+  const execution = selected ? nodeExecution(selected, selectedStatus, stage) : null;
+  const connectedCalls = selected ? calls.filter((call) => call.target === selected.id || call.source === selected.id) : [];
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} tabIndex={-1} className="agent-modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
       <header><div><span>{readOnly ? `${t("历史记录")} · ${t("只读")}` : t("AI Agent编排器")}</span><h2 id="agent-modal-title">{t(title)}</h2></div><button onClick={onClose} aria-label={t("关闭 Agent 编排")}><X size={22} /></button></header>
       <div className="agent-modal-layout">
-        <aside className="agent-library">
-          <span>{t("可用节点")}</span>
-          <p>{t(readOnly ? "历史流程不可修改。" : "按当前 Process 添加系统或数据源。")}</p>
-          {graphExtras[phase].map((node) => <button key={node.id} disabled={readOnly} onClick={() => onToggleExtra(node.id)} className={enabledExtras.includes(node.id) ? "added" : ""}>
-            {node.kind === "source" ? <Database size={18} /> : <FlowArrow size={18} />}
-            <span><b>{node.name}</b><small>{node.type}</small></span>
-            {enabledExtras.includes(node.id) ? <Check size={16} /> : <Plus size={16} />}
-          </button>)}
-        </aside>
-        <div className="graph-center"><div className="graph-scroll"><div className="graph-detail-canvas protocol-canvas">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <defs><marker id="call-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 6 3 L 0 6 z" fill="context-stroke" /></marker></defs>
-            {calls.map((call) => <path key={call.id} className={`call-edge ${call.protocol.toLowerCase()} ${getCallStatus(call, statuses)}`} d={call.route.map(([x, y], index) => `${index ? "L" : "M"} ${x} ${y}`).join(" ")} markerEnd="url(#call-arrow)" />)}
-          </svg>
-          {calls.map((call) => <button key={call.id} className={`call-edge-label ${call.protocol.toLowerCase()} ${getCallStatus(call, statuses)}`} style={{ left: `${call.label[0]}%`, top: `${call.label[1]}%` }} onClick={() => onSelect(call.target)} aria-label={`${call.sourceName} ${call.protocol} ${call.targetName}, ${t(callStatusLabel(getCallStatus(call, statuses)))}`}>{call.protocol}<span>{getCallStatus(call, statuses) === "running" ? t("调用中") : getCallStatus(call, statuses) === "done" ? "✓" : t("待调用")}</span></button>)}
-          {nodes.map((node, index) => <button
-            key={node.id}
-            onClick={() => onSelect(node.id)}
-            className={`graph-node ${node.kind} ${selected?.id === node.id ? "selected" : ""} ${node.kind === "agent" ? agentStatus(index, stage, statuses, node.id) : "done"}`}
-            style={{ left: `${node.x}%`, top: `${node.y}%` }}
-          >
-            {node.kind === "agent" ? <Robot size={19} /> : node.kind === "source" ? <Database size={19} /> : <FlowArrow size={19} />}
-            <span><strong>{node.name}</strong><small>{node.type}</small></span>
-          </button>)}
-        </div></div><AgentCallList phase={phase} nodes={nodes} statuses={statuses} onSelect={onSelect} /><div className="agent-metrics" aria-label={t("Agent 效率指标")}>{metrics.map(([value, label]) => <div key={label}><strong>{t(value)}</strong><span>{t(label)}</span></div>)}</div></div>
-        <aside className="node-inspector">
+        <div className="orchestration-workspace">
+          <div className="orchestration-toolbar">
+            <span><FlowArrow size={18} />{t("调用关系")} <small>{nodes.length} {t("个节点")}</small></span>
+            <details className="orchestration-resources"><summary>{t("系统与数据源")}</summary>
+              <div>{graphExtras[phase].map((node) => <button key={node.id} disabled={readOnly} onClick={() => onToggleExtra(node.id)} aria-pressed={enabledExtras.includes(node.id)}>
+                <Database size={18} /><span>{node.name}</span>{enabledExtras.includes(node.id) ? <Check size={16} /> : <Plus size={16} />}
+              </button>)}</div>
+            </details>
+          </div>
+          {/* Keyboard focus lets users scroll the diagram without a pointer. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+          <div className="orchestration-scroll" tabIndex={0} role="region" aria-label={t("编排画布，可滚动查看")}>
+            <div className="orchestration-canvas" style={{ width: graph.width, height: graph.height }}>
+              <svg width={graph.width} height={graph.height} viewBox={`0 0 ${graph.width} ${graph.height}`} aria-hidden="true">
+                <defs><marker id="call-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke" /></marker></defs>
+                {graph.edges.map((call) => <path key={call.id} className={`call-edge ${call.protocol.toLowerCase()} ${getCallStatus(call, statuses)} ${selected && (call.source === selected.id || call.target === selected.id) ? "highlighted" : ""}`} d={call.route.map(([x, y], index) => `${index ? "L" : "M"} ${x} ${y}`).join(" ")} markerEnd="url(#call-arrow)" />)}
+              </svg>
+              {graph.edges.map((call) => <button key={call.id} className="orchestration-edge-label" style={{ left: call.label[0], top: call.label[1] }} onClick={() => onSelect(call.target)} aria-label={`${call.sourceName} → ${call.targetName} · ${call.protocol} · ${t(callStatusLabel(getCallStatus(call, statuses)))}`}>{t(call.protocol)}</button>)}
+              {graph.nodes.map((node) => <button key={node.id} onClick={() => onSelect(node.id)} aria-pressed={selected?.id === node.id}
+                className={`orchestration-node ${selected?.id === node.id ? "selected" : ""} ${statuses[node.id] ?? "waiting"}`}
+                style={{ left: node.x - node.width / 2, top: node.y - node.height / 2, width: node.width, height: node.height }}>
+                <span className="orchestration-node-icon">{node.kind === "agent" ? <Robot size={19} /> : <Database size={19} />}</span>
+                <strong>{node.name}</strong>
+                <small>{node.kind !== "agent" ? t("数据连接") : t(statusLabel(statuses[node.id] ?? "waiting"))}</small>
+              </button>)}
+            </div>
+          </div>
+          <div className="orchestration-legend"><span>{t("箭头表示调用方向")}</span><span>MCP · {t("数据查询")} · A2A · {t("流程委派")}</span></div>
+        </div>
+        <aside className="node-inspector execution-inspector" aria-label={t("节点详情")}>
           {selected && <>
-            <span>{t("节点详情")}</span>
+            <header><span>{t("节点详情")}</span><b className={`execution-status ${selectedStatus}`}>{t(selected.kind !== "agent" ? "数据连接" : statusLabel(selectedStatus))}</b></header>
             <div className="inspector-icon">{selected.kind === "agent" ? <Robot size={24} /> : <Database size={24} />}</div>
-            <h3>{selected.name}</h3>
-            <b>{selected.type}</b>
-            <dl>
-              {calls.filter((call) => call.target === selected.id || call.source === selected.id).map((call) => <div className="agent-call-record" key={call.id}>
-                <dt>{call.protocol} · {t(callStatusLabel(getCallStatus(call, statuses)))} · Mock</dt>
-                <dd>{call.sourceName} → {call.targetName}</dd>
-                <dd><code>{t(call.command)}</code></dd>
-                <dd>{t(getCallStatus(call, statuses) === "waiting" ? "计划输入" : "请求输入")}：{t(call.input)}</dd>
-                <dd>{t(getCallStatus(call, statuses) === "waiting" ? (call.protocol === "A2A" ? "客户接受方案且 Dealer 上传材料后，才会委派审批任务。" : "尚未发送调用，不展示返回结果。") : getCallStatus(call, statuses) === "running" ? "请求已发出，正在等待 Agent 返回。" : "Agent 已返回；点击对应节点查看结果和依据。")}</dd>
-              </div>)}
-              <div><dt>{t("它刚刚接到的任务")}</dt>{readOnly ? <dd>{t(instructionValue)}</dd> : <textarea aria-label={`${t("编辑")} ${selected.name}`} value={t(instructionValue)} onChange={(event) => onInstructionChange(event.target.value)} />}</div>
-              {selected.kind !== "agent" || selectedStatus === "done" ? <>
-                <div><dt>{t("它是怎么回答的")}</dt><dd>{t(selected.detail)}</dd></div>
-                <div><dt>{t("它参考了这些内容")}</dt><dd>{t(selected.evidence)}</dd></div>
-              </> : <div className={`inspector-pending ${selectedStatus}`}><dt>{t(selectedStatus === "running" ? "正在处理" : "尚未执行")}</dt><dd>{t(selectedStatus === "running" ? "Agent 正在逐步执行任务。完成后，这里才会显示它的回答和引用证据。" : "这个 Agent 还没有开始。回答和证据会在执行完成后出现。")}</dd></div>}
-              <div><dt>{t("现在的状态")}</dt><dd>{t(selected.kind === "agent" ? statusLabel(selectedStatus) : "已连接")}</dd></div>
-            </dl>
+            <h3>{selected.name}</h3><p className="execution-type">{selected.type}</p>
+            <section className="execution-plan"><h4>{t("执行计划")}</h4>
+              {selectedStatus === "waiting" && !readOnly ? <textarea aria-label={`${t("编辑执行计划")} ${selected.name}`} value={t(instructionValue)} onChange={(event) => onInstructionChange(event.target.value)} /> : <p>{t(instructionValue)}</p>}
+              <small>{t("参考来源")} · {t(selected.evidence)}</small>
+            </section>
+            {execution && execution.events.length > 0 && <section className="execution-record" aria-live="polite">
+              <h4>{t("执行过程")}</h4>
+              <ol>{execution.events.map((event, index) => <li key={index} className={event.state}><span>{event.state === "done" ? <Check size={14} /> : <Clock size={14} />}</span>{t(event.label)}</li>)}</ol>
+              {execution.result && <div className="execution-result"><h4>{t("执行结果")}</h4><p>{t(execution.result)}</p></div>}
+            </section>}
+            {connectedCalls.length > 0 && <details className="execution-connections" key={selected.id}><summary>{t("查看调用关系")} · {connectedCalls.length}</summary>
+              {connectedCalls.map((call) => <div key={call.id}><b>{call.sourceName} → {call.targetName}</b><small>{t(call.protocol)} · {t(callStatusLabel(getCallStatus(call, statuses)))}</small><p>{t(call.command)}</p><p>{t(call.input)}</p></div>)}
+            </details>}
           </>}
         </aside>
       </div>
-      <footer><span>{nodes.length}{t(" 个节点 · 自动连线")}</span><button onClick={onClose}>{t(readOnly ? "返回当前流程" : "保存编排")}</button></footer>
+      <footer><span>{t("点击节点查看计划与执行记录")}</span><button onClick={onClose}>{t(readOnly ? "返回当前流程" : "完成")}</button></footer>
     </section>
   </div>;
 }
@@ -1139,8 +1148,8 @@ function DealerMockModal({ type, documentsComplete, onDocumentsComplete, onClose
   const title = type === "repair" ? "维修与 CLAIM 回写" : "Dealer 补件回写";
   return <div className="chat-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} tabIndex={-1} className="dealer-modal" role="dialog" aria-modal="true" aria-labelledby="dealer-modal-title">
-      <header><div><span>MOCK · CCO EVENT</span><h2 id="dealer-modal-title">{t(title)}</h2></div><button onClick={onClose} aria-label={t("关闭 Mock 回写")}><X size={22} /></button></header>
-      {type === "repair" && <><div className="mock-receipt"><Wrench size={22} /><div><strong>{t("车辆维修与一年延保已完成")}</strong><span>{t("Dealer 将维修单和 CLAIM 文件回写 CCO。")}</span></div></div><fieldset><legend>{t("演示资料状态")}</legend><label className={documentsComplete ? "selected" : ""}><input type="radio" checked={documentsComplete} onChange={() => onDocumentsComplete(true)} /><span><FileText size={20} /><b>{t("资料完整")}</b><small>{t("进入正常审批")}</small></span></label><label className={!documentsComplete ? "selected" : ""}><input type="radio" checked={!documentsComplete} onChange={() => onDocumentsComplete(false)} /><span><WarningCircle size={20} /><b>{t("缺少授权签字")}</b><small>{t("演示补件路径")}</small></span></label></fieldset></>}
+      <header><div><span>CCO</span><h2 id="dealer-modal-title">{t(title)}</h2></div><button onClick={onClose} aria-label={t("关闭 CCO 回写")}><X size={22} /></button></header>
+      {type === "repair" && <><div className="mock-receipt"><Wrench size={22} /><div><strong>{t("车辆维修与一年延保已完成")}</strong><span>{t("Dealer 将维修单和 CLAIM 文件回写 CCO。")}</span></div></div><fieldset><legend>{t("资料状态")}</legend><label className={documentsComplete ? "selected" : ""}><input type="radio" checked={documentsComplete} onChange={() => onDocumentsComplete(true)} /><span><FileText size={20} /><b>{t("资料完整")}</b><small>{t("进入正常审批")}</small></span></label><label className={!documentsComplete ? "selected" : ""}><input type="radio" checked={!documentsComplete} onChange={() => onDocumentsComplete(false)} /><span><WarningCircle size={20} /><b>{t("缺少授权签字")}</b><small>{t("需要补充资料")}</small></span></label></fieldset></>}
       {type === "supplement" && <div className="mock-receipt"><FileText size={22} /><div><strong>{t("客户授权文件已补充")}</strong><span>{t("提交后将重新触发 OCR 审核。")}</span></div></div>}
       <footer><button onClick={onClose}>{t("取消")}</button><button onClick={onSubmit}>{t("提交 CCO 回写")}</button></footer>
     </section>

@@ -3,13 +3,13 @@ import test from "node:test";
 import { getAgentCalls, getCallStatus, visibleAgentNodes } from "../app/chat/agentCalls.mjs";
 
 const node = (id, kind = "agent") => ({ id, name: id, kind, x: 50, y: 50 });
-const retention = ["retention", "technical", "legal", "parts", "warranty", "strategy", "claim-process"].map((id) => node(id));
+const retention = ["retention", "repair-history", "technical", "mobility", "warranty", "customer-care", "claim-process"].map((id) => node(id));
 
 test("Process calls every Data Agent through MCP, not through another Data Agent", () => {
   const calls = getAgentCalls("retention", retention);
-  assert.deepEqual(calls.filter((call) => call.protocol === "MCP").map((call) => call.target).sort(), ["legal", "parts", "technical", "warranty"]);
+  assert.deepEqual(calls.filter((call) => call.protocol === "MCP").map((call) => call.target).sort(), ["mobility", "repair-history", "technical", "warranty"]);
   assert.ok(calls.filter((call) => call.protocol === "MCP").every((call) => call.source === "retention"));
-  assert.match(calls.find((call) => call.target === "parts").input, /Technical Service.*12-36-8-099-417/);
+  assert.match(calls.find((call) => call.target === "mobility").input, /Dealer/);
 });
 
 test("A2A retains source and destination in both process views", () => {
@@ -30,7 +30,7 @@ test("future handoff stays pending even when all retention agents have completed
 
 test("intake has no invented Agent call; optional system links are not labeled MCP", () => {
   assert.deepEqual(getAgentCalls("intake", [node("router")]), []);
-  const calls = getAgentCalls("intake", [node("router"), node("cco-intake", "system")]);
+  const calls = getAgentCalls("intake", [node("cco-execution"), node("cco-intake", "system")]);
   assert.equal(calls[0].protocol, "连接");
   assert.deepEqual(getAgentCalls("retention", [node("retention")]), []);
 });
