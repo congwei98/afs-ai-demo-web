@@ -312,6 +312,8 @@ function ChatWorkbenchContent() {
   const [complaintInvestigationStarted, setComplaintInvestigationStarted] = useState(false);
   const [complaintPlanAgentsVisible, setComplaintPlanAgentsVisible] = useState(false);
   const [complaintWarrantyRequested, setComplaintWarrantyRequested] = useState(false);
+  const [complaintConfirmationsReady, setComplaintConfirmationsReady] = useState(false);
+  const [complaintApprovals, setComplaintApprovals] = useState({ technical: false, mobility: false });
   const [complaintInput, setComplaintInput] = useState("");
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -385,6 +387,8 @@ function ChatWorkbenchContent() {
     setComplaintInvestigationStarted(false);
     setComplaintPlanAgentsVisible(false);
     setComplaintWarrantyRequested(false);
+    setComplaintConfirmationsReady(false);
+    setComplaintApprovals({ technical: false, mobility: false });
     setComplaintInput("");
     complaintNextId.current = 2;
     setComplaintAgentStates({ "complaint-leading": "running" });
@@ -750,7 +754,12 @@ function ChatWorkbenchContent() {
     if (action === "按建议开始") {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
-      streamComplaintAssistant("我已按确认后的计划启动 Data Agent 查询。", { onDone: () => setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", ...(complaintWarrantyRequested ? { warranty: "done" } : {}) })) });
+      streamComplaintAssistant("Data Agent 查询已完成。维修记录确认车辆在交付后出现二缸点火线圈故障；Technical Service 返回更换全部 6 个点火线圈的维修方案；Mobility 返回未来一周可提供一辆 5 系代步车。\n\n我已在左侧创建 Technical Service 与 Mobility Team 的确认任务，请分别确认维修方案和代步车安排。", {
+        onDone: () => {
+          setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", ...(complaintWarrantyRequested ? { warranty: "done" } : {}) }));
+          setComplaintConfirmationsReady(true);
+        },
+      });
       return;
     }
     setComplaintMessages((current) => [...current, userMessage, {
@@ -801,6 +810,8 @@ function ChatWorkbenchContent() {
           stage={stage}
           taskView={taskView}
           approvals={approvals}
+          complaintConfirmationsReady={complaintConfirmationsReady}
+          complaintApprovals={complaintApprovals}
           onSelectTask={(task) => { if (task === "complaint-investigation") startComplaintInvestigationTask(); setTaskView(task); setDrawer(null); setGraphOpen(false); setSelectedNode(null); }}
           onCreateTask={() => {
             if (repairQueryTimer.current) clearTimeout(repairQueryTimer.current);
@@ -858,7 +869,7 @@ function ChatWorkbenchContent() {
                 id="chat-command"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder={t(waitingExternal ? "等待 CCO 回写后继续" : waitingApproval ? "等待审批任务完成" : stagePrompt(stage))}
+                placeholder="Do anything"
                 disabled={!canSend}
               />
               <button type="submit" disabled={!canSend || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button>
@@ -907,7 +918,7 @@ function ChatWorkbenchContent() {
   );
 }
 
-function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, repairQueryStatus, repairQueryRequest, repairQueryVehicle, mockLabel, onMock, drawer, onClose }: { stage: Stage; taskView: TaskView; approvals: { "repair-history": boolean; technical: boolean; mobility: boolean; warranty: boolean; legal: boolean; parts: boolean }; onSelectTask: (task: TaskView) => void; onCreateTask: () => void; repairQueryStatus: AgentStatus | null; repairQueryRequest: string | null; repairQueryVehicle: string; mockLabel: string | null; onMock: () => void; drawer: boolean; onClose: () => void }) {
+function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, complaintApprovals, onSelectTask, onCreateTask, repairQueryStatus, repairQueryRequest, repairQueryVehicle, mockLabel, onMock, drawer, onClose }: { stage: Stage; taskView: TaskView; approvals: { "repair-history": boolean; technical: boolean; mobility: boolean; warranty: boolean; legal: boolean; parts: boolean }; complaintConfirmationsReady: boolean; complaintApprovals: { technical: boolean; mobility: boolean }; onSelectTask: (task: TaskView) => void; onCreateTask: () => void; repairQueryStatus: AgentStatus | null; repairQueryRequest: string | null; repairQueryVehicle: string; mockLabel: string | null; onMock: () => void; drawer: boolean; onClose: () => void }) {
   const { t, locale } = useLanguage();
   const compactStatus = (status: string) => {
     if (["已完成", "已审批"].includes(status)) return locale === "en" ? "Done" : "完成";
@@ -926,11 +937,15 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
   if (stage === "waiting_investigation_approvals" && !approvals.technical) approvalTasks.push({ id: "technical", title: "Technical Service Data Agent 请求业务审批｜4/7 维修方案" });
   if (stage === "waiting_investigation_approvals" && !approvals.mobility) approvalTasks.push({ id: "mobility", title: "Mobility Data Agent 请求业务审批｜代步车可用性" });
   if (stage === "waiting_investigation_approvals" && !approvals.warranty) approvalTasks.push({ id: "warranty", title: "Warranty Data Agent 请求业务审批｜FRD 与里程" });
+  if (complaintConfirmationsReady && !complaintApprovals.technical) approvalTasks.push({ id: "technical", title: "Technical Service 确认维修方案｜廖女士" });
+  if (complaintConfirmationsReady && !complaintApprovals.mobility) approvalTasks.push({ id: "mobility", title: "Mobility Team 确认代步车｜廖女士" });
   const completedApprovalTasks = [
     approvals["repair-history"] ? { id: "repair-history" as TaskView, title: "Repair History 已确认｜维修记录" } : null,
     approvals.technical ? { id: "technical" as TaskView, title: "Technical Service 已确认｜维修方案" } : null,
     approvals.mobility ? { id: "mobility" as TaskView, title: "Mobility 已确认｜代步车安排" } : null,
     approvals.warranty ? { id: "warranty" as TaskView, title: "Warranty 已确认｜FRD 与里程" } : null,
+    complaintConfirmationsReady && complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service 已确认｜维修方案" } : null,
+    complaintConfirmationsReady && complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team 已确认｜代步车安排" } : null,
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const visiblePending = showAll ? [...createdTasks, ...pendingTaskItems] : [...createdTasks, ...pendingTaskItems].slice(0, 4);
   const visibleCompleted = showAll ? completedTaskItems : completedTaskItems.slice(0, 2);
@@ -994,7 +1009,7 @@ function RepairQueryTask({ input, onInput, request, vehicle, status, needsDetail
     </div>
     <form className="chat-composer adhoc-composer" onSubmit={onSubmit}>
       <label className="sr-only" htmlFor="repair-query-command">{t("业务指令")}</label>
-      <div><input id="repair-query-command" value={input} onChange={(event) => onInput(event.target.value)} disabled={status === "running"} placeholder={t("例如：帮我查询 XXX 车的所有维修记录")} /><button type="submit" disabled={!input.trim() || status === "running"} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div>
+      <div><input id="repair-query-command" value={input} onChange={(event) => onInput(event.target.value)} disabled={status === "running"} placeholder="Do anything" /><button type="submit" disabled={!input.trim() || status === "running"} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div>
     </form>
   </>;
 }
@@ -1043,17 +1058,18 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
       <div className="approval-ai-icon"><Robot size={48} /></div>
       <div>
         <div className="approval-basic-table"><table><tbody><tr><th>{t("客户")}</th><td>{t("廖女士")}</td><th>{t("车型")}</th><td>BMW X5</td></tr><tr><th>VIN</th><td>LBV41EP0…J47787</td><th>{t("当前里程")}</th><td>91 km</td></tr></tbody></table></div>
-        <p>{t("查询原因")}：{t(reason)}</p>
-        <p>{t("查询结果")}：{t(result)}</p>
+        <p><strong>{t("客户投诉背景")}：</strong>{t("廖女士于 4 月 1 日购买 BMW X5，提车当天出现发动机抖动。经销商初步判断为点火线圈故障，但客户不接受维修并要求退车。")}</p>
+        <p><strong>{t("需要确认的信息")}：</strong>{t(result)}</p>
+        <p>{t("确认依据")}：{t(reason)}</p>
       </div>
     </article>
-    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} ${t("审批")}`}><button onClick={() => approveWith(`我确认 ${role} 的数据，可以继续`)}>{t("确认数据并继续")}</button><button onClick={() => setReply(t("请补充说明证据来源"))}>{t("要求补充证据")}</button></nav>}
+    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} ${t("审批")}`}><button onClick={() => approveWith(`我确认 ${role} 的数据，可以继续`)}>{t("确认信息")}</button><button onClick={() => setReply(t("请更正以下信息："))}>{t("更正信息")}</button></nav>}
     {submittedReply && <article className="approval-user-reply"><UserCircle size={22} /><p>{t(submittedReply)}</p></article>}
     {approved && <article className="approval-confirmed"><Robot size={44} /><p>{t("收到，我已经记录你的审批意见。请继续完成左侧其余 Agent 结果的审批。")}</p></article>}
     </div>
     <form className="approval-chat-composer" onSubmit={submitApproval}>
       <label className="sr-only" htmlFor={`approval-reply-${type}`}>{t("审批意见")}</label>
-      <div><button className="file-upload-button" type="button" onClick={() => approvalFileInput.current?.click()} disabled={approved} aria-label={t("上传审批附件")}><Paperclip size={20} /></button><input ref={approvalFileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) setReply(`${t("已附加")} ${file.name}`); event.target.value = ""; }} /><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder={approved ? t("审批意见已记录") : `${t("例如")}：${t("我确认")} ${role} ${t("的数据，可以继续")}`} /><button type="submit" disabled={approved || !reply.trim()} aria-label={`${t("发送")} ${role} ${t("审批意见")}`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
+      <div><button className="file-upload-button" type="button" onClick={() => approvalFileInput.current?.click()} disabled={approved} aria-label={t("上传审批附件")}><Paperclip size={20} /></button><input ref={approvalFileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) setReply(`${t("已附加")} ${file.name}`); event.target.value = ""; }} /><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder="Do anything" /><button type="submit" disabled={approved || !reply.trim()} aria-label={`${t("发送")} ${role} ${t("审批意见")}`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
     </form>
   </section>;
 }

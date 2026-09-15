@@ -28,6 +28,16 @@ test("complaint task is the refreshed default and supports the same FRD plan upd
   assert.match(workbench, /complaintPlanAgentsVisible/);
 });
 
+test("completed complaint data checks create Technical and Mobility confirmation tasks", () => {
+  assert.match(workbench, /setComplaintConfirmationsReady\(true\)/);
+  assert.match(workbench, /Technical Service 确认维修方案｜廖女士/);
+  assert.match(workbench, /Mobility Team 确认代步车｜廖女士/);
+  assert.match(workbench, /客户投诉背景/);
+  assert.match(workbench, /需要确认的信息/);
+  assert.match(workbench, /确认信息/);
+  assert.match(workbench, /更正信息/);
+});
+
 test("routers are presented as leading agents with an investigation process agent", () => {
   assert.doesNotMatch(workbench, /type: "Router Agent"/);
   assert.match(workbench, /name: "Complaint Leading Agent"/);
