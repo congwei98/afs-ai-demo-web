@@ -7,7 +7,15 @@ const workbench = readFileSync(new URL("../app/chat/ChatWorkbench.tsx", import.m
 test("complaint investigation task keeps the requested first-turn experience", () => {
   assert.match(workbench, /lead: "识别到一个高风险投诉。"/);
   assert.match(workbench, /showRecording: false/);
+  assert.match(workbench, /streaming: true/);
   assert.match(workbench, /actions: \["Start Compliant Investigation", "要求补充更多信息"\]/);
+  const taskMessages = workbench.slice(workbench.indexOf("const complaintInvestigationMessages"), workbench.indexOf("const callTranscript"));
+  assert.doesNotMatch(taskMessages, /role: "system"/);
+});
+
+test("investigation agent appears only after the start action", () => {
+  assert.match(workbench, /node\.id === "complaint-leading" \|\| complaintInvestigationStarted/);
+  assert.match(workbench, /setComplaintInvestigationStarted\(true\)/);
 });
 
 test("routers are presented as leading agents with an investigation process agent", () => {

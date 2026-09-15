@@ -176,13 +176,13 @@ const initialMessages: Message[] = [
 ];
 
 const complaintInvestigationMessages: Message[] = [
-  { id: 1, role: "system", body: "后台处理完成｜来电已转写并完成风险识别", visible: 22 },
   {
-    id: 2,
+    id: 1,
     role: "assistant",
     lead: "识别到一个高风险投诉。",
     body: "客户廖女士于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上出现发动机抖动。经销商初步判断为点火线圈故障并建议维修，但客户认为新车存在质量问题，不接受维修并明确要求退车。",
     visible: 0,
+    streaming: true,
     tone: "risk",
     showRecording: false,
     actions: ["Start Compliant Investigation", "要求补充更多信息"],
@@ -307,12 +307,13 @@ function ChatWorkbenchContent() {
   const [repairQueryNeedsDetail, setRepairQueryNeedsDetail] = useState(false);
   const [complaintMessages, setComplaintMessages] = useState<Message[]>(complaintInvestigationMessages);
   const [complaintAgentStates, setComplaintAgentStates] = useState<Record<string, AgentStatus>>({
-    "complaint-leading": "done",
-    "complaint-investigation-process": "waiting",
+    "complaint-leading": "waiting",
   });
+  const [complaintInvestigationStarted, setComplaintInvestigationStarted] = useState(false);
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repairQueryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const complaintTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const messageEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const initialStarted = useRef(false);
@@ -346,7 +347,7 @@ function ChatWorkbenchContent() {
     detail: repairQueryStatus === "done" ? `已查询 ${repairQueryVehicle} 的全部维修记录，共返回 ${mockRepairRecords.length} 条。` : "正在识别车辆标识并查询全部维修工单。",
     instruction: `查询 ${repairQueryVehicle} 的全部维修记录，并按时间顺序返回。`,
   }] : [], [repairQueryStatus, repairQueryVehicle]);
-  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintInvestigationNodes : graphNodes;
+  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintInvestigationNodes.filter((node) => node.id === "complaint-leading" || complaintInvestigationStarted) : graphNodes;
   const activeAgentStates = taskView === "repair-query" && repairQueryStatus ? { "adhoc-repair-history": repairQueryStatus } : taskView === "complaint-investigation" ? complaintAgentStates : agentStates;
   const selected = activeGraphNodes.find((node) => node.id === selectedNode) ?? activeGraphNodes[0];
 
@@ -355,11 +356,36 @@ function ChatWorkbenchContent() {
     timers.current = [];
   };
 
+  const clearComplaintTimers = () => {
+    complaintTimers.current.forEach(clearTimeout);
+    complaintTimers.current = [];
+  };
+
   useEffect(() => () => {
     clearTimers();
+    clearComplaintTimers();
     if (repairQueryTimer.current) clearTimeout(repairQueryTimer.current);
     initialStarted.current = false;
   }, []);
+
+  const startComplaintInvestigationTask = () => {
+    clearComplaintTimers();
+    setComplaintInvestigationStarted(false);
+    setComplaintAgentStates({ "complaint-leading": "running" });
+    setComplaintMessages(complaintInvestigationMessages.map((message) => ({ ...message, visible: 0, streaming: true })));
+    let visible = 0;
+    const streamResponse = () => {
+      visible += 1;
+      setComplaintMessages((current) => current.map((message) => ({ ...message, visible })));
+      if (visible < complaintInvestigationMessages[0].body.length) {
+        complaintTimers.current.push(setTimeout(streamResponse, 24));
+        return;
+      }
+      setComplaintMessages((current) => current.map((message) => ({ ...message, visible: complaintInvestigationMessages[0].body.length, streaming: false })));
+      setComplaintAgentStates({ "complaint-leading": "done" });
+    };
+    complaintTimers.current.push(setTimeout(streamResponse, 180));
+  };
 
   useEffect(() => {
     if (initialStarted.current) return;
@@ -673,6 +699,7 @@ function ChatWorkbenchContent() {
         body: "Compliant Investigation 已启动。我会先核实车辆故障、经销商检查结论与客户退车诉求，并在需要业务确认时发起补充信息请求。",
         visible: 72,
       }]);
+      setComplaintInvestigationStarted(true);
       setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "running" });
       return;
     }
@@ -706,7 +733,7 @@ function ChatWorkbenchContent() {
           stage={stage}
           taskView={taskView}
           approvals={approvals}
-          onSelectTask={(task) => { setTaskView(task); setDrawer(null); setGraphOpen(false); setSelectedNode(null); }}
+          onSelectTask={(task) => { if (task === "complaint-investigation") startComplaintInvestigationTask(); setTaskView(task); setDrawer(null); setGraphOpen(false); setSelectedNode(null); }}
           onCreateTask={() => {
             if (repairQueryTimer.current) clearTimeout(repairQueryTimer.current);
             setTaskView("repair-query");
@@ -851,8 +878,8 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
     <button className="new-task-button" onClick={createTask}><Plus size={17} />{t("新建任务")}</button>
     {isStarted && !isFinished && <><div className="task-section-label">{t("进行中")}</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}>{t(mockLabel)}<ArrowRight size={16} /></button>}</>}
     <div className="task-section-label">{t("待处理")}</div>
-    {!isStarted && demoTask}
     {investigationTask}
+    {!isStarted && demoTask}
     {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("需审批")}>{compactStatus("需审批")}</b></button>)}
     {visiblePending.map((task) => <button className={`task-list-item ${task.id === "repair-query" && taskView === "repair-query" ? "active" : ""}`} key={task.id} onClick={() => task.id === "repair-query" && onSelectTask("repair-query")}><span title={task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}>{task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}</span><b>{compactStatus(task.id === "repair-query" ? repairQueryStatus === "done" ? "已完成" : repairQueryStatus === "running" ? "处理中" : task.status : task.status)}</b></button>)}
     <div className="task-section-label">{t("已完成")}</div>
