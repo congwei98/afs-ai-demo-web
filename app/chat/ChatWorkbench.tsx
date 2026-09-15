@@ -192,14 +192,14 @@ const complaintInvestigationMessages: Message[] = [
 const callTranscript = "客户（廖女士）：我 4 月 1 日在珠海锦泰宝汇买了一辆 BMW X5，今天刚提车回家，路上就发现发动机一直抖动。\n\nST：我们已经收到您的反馈。车辆现在已经送回经销商了吗？\n\n客户：是的，送回去检查了。他们说是点火线圈故障，需要换点火线圈。新车第一天就出这种问题，我认为是车辆质量有问题。\n\nST：我会完整记录本次投诉和经销商的检查结论。\n\n客户：我不接受维修，我要求退车。请尽快告诉我怎么处理。";
 
 const retentionPlan: PlanRow[] = [
-  { purpose: "核实故障事实", action: "查询购车日附近的维修工单", expected: "确认故障记录与客户描述是否一致" },
-  { purpose: "确认修复安排", action: "查询已登记的维修方案", expected: "明确后续维修安排" },
-  { purpose: "确认出行保障", action: "查询经销商是否有可用代步车", expected: "明确维修期间的出行支持条件" },
+  { purpose: "Verify the complaint facts", action: "Retrieve the April 2 repair work order", expected: "Validate the reported ignition fault" },
+  { purpose: "Confirm the repair arrangement", action: "Confirm the approved repair plan", expected: "Confirm the six-coil replacement scope" },
+  { purpose: "Confirm mobility support", action: "Check the dealer replacement vehicle", expected: "Confirm mobility coverage during repair" },
 ];
 
 const updatedRetentionPlan: PlanRow[] = [
   ...retentionPlan,
-  { purpose: "确认新车状态", action: "查询 FRD 保修开始日与当前里程", expected: "补充车辆状态判断依据" },
+  { purpose: "Verify new-vehicle status", action: "Retrieve FRD start date and mileage", expected: "Confirm the vehicle status evidence" },
 ];
 
 const pendingTaskItems = [
@@ -745,8 +745,8 @@ function ChatWorkbenchContent() {
         if (next.technical && next.mobility) {
           setComplaintKnowledgeVisible(true);
           setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
-          streamComplaintAssistant("Complaint Knowledge Agent 已汇总已确认的维修方案、代步车资源与历史案例。\n\n当前经销商和客户达成一致的补偿方案是：提供一年延保、一次发动机保养、两次机油保养，并提供代步车。整体费用为 8300 RMB。\n\n基于历史案例，类似车型和故障的补偿金额在 7000 到 9500 RMB 之间，因此建议通过审批。", {
-            actions: ["同意方案", "更新方案"],
+          streamComplaintAssistant("Complaint Knowledge Agent has consolidated the approved repair plan, mobility support, and comparable-case evidence.\n\nThe dealer and customer have aligned on a compensation package of a one-year extended warranty, one engine service, two oil services, and a replacement vehicle. The total value is RMB 8,300.\n\nComparable BMW X5 ignition and spark-plug repair complaints were settled between RMB 7,000 and RMB 9,500. This proposed package is within the historical range, so I recommend approving it.", {
+            actions: ["Approve proposal", "Update proposal"],
             onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
           });
         }
@@ -779,7 +779,7 @@ function ChatWorkbenchContent() {
     if (action === "按建议开始") {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
-      streamComplaintAssistant("Data Agent 查询已完成。维修记录确认车辆在交付后出现二缸点火线圈故障；Technical Service 返回更换全部 6 个点火线圈的维修方案；Mobility 返回未来一周可提供一辆 5 系代步车。\n\n我已在左侧创建 Technical Service 与 Mobility Team 的确认任务，请分别确认维修方案和代步车安排。", {
+      streamComplaintAssistant("The Data Agents have completed their checks. Repair History found an April 2 repair work order documenting a cylinder-two ignition-coil fault. Technical Service recommends replacing all six ignition coils. Mobility confirmed a BMW 5 Series replacement vehicle for the coming week. FRD shows a warranty start date of April 3, 2026 and current mileage of 91 km, confirming new-vehicle status.\n\nTechnical Service and Mobility Team confirmation tasks are now available in the left panel.", {
         onDone: () => {
           setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", ...(complaintWarrantyRequested ? { warranty: "done" } : {}) }));
           setComplaintConfirmationsReady(true);
