@@ -75,6 +75,7 @@
 .chat-message.system>div { padding:6px 10px; border:0; }
 .message-avatar { width:56px; height:56px; flex:0 0 56px; display:grid; place-items:center; }
 .chat-message h3 { margin:0 0 5px; }
+.message-lead { display:block; margin:0 0 8px; }
 .chat-message p { margin:0; white-space:pre-line; }
 .adhoc-thread .chat-message.assistant { max-width:94%; }
 .adhoc-empty { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
@@ -124,6 +125,7 @@
 .chat-composer { padding:8px 11px; }
 .sr-only { width:1px; height:1px; padding:0; position:absolute; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .chat-composer>div { display:grid; grid-template-columns:1fr 44px; gap:8px; }
+.chat-composer.complaint-investigation-composer>div { grid-template-columns:minmax(0,1fr) 44px; }
 .chat-composer.adhoc-composer>div { grid-template-columns:minmax(0,1fr) 44px; }
 .chat-composer input { min-width:0; height:44px; padding:0 13px; border:1px solid var(--chat-line); }
 .chat-composer button { width:44px; height:44px; display:grid; place-items:center; border:0; }

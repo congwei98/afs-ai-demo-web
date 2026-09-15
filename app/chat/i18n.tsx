@@ -5,6 +5,18 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 export type Locale = "en" | "zh";
 
 const english: Record<string, string> = {
+  "识别到一个高风险投诉。": "A high-risk complaint has been identified.",
+  "客户廖女士于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上出现发动机抖动。经销商初步判断为点火线圈故障并建议维修，但客户认为新车存在质量问题，不接受维修并明确要求退车。": "Ms. Liao purchased a BMW X5 from Zhuhai Jintai Baohui on April 1, 2026. The engine began vibrating on her way home on the delivery day. The dealer's initial diagnosis was an ignition-coil fault and they recommended repair, but the customer believes the new vehicle has a quality defect, declines repair, and explicitly requests a return.",
+  "要求补充更多信息": "Request More Information",
+  "高风险投诉调查｜廖女士": "High-risk Complaint Investigation | Ms. Liao",
+  "Compliant Investigation 已启动。我会先核实车辆故障、经销商检查结论与客户退车诉求，并在需要业务确认时发起补充信息请求。": "Compliant Investigation has started. I will verify the vehicle fault, the dealer's findings, and the customer's return request, and request additional information when business confirmation is needed.",
+  "请补充经销商完整检测报告、维修工单、车辆当前里程，以及客户是否已提交书面退车申请。收到后，我会更新投诉风险判断与调查建议。": "Please provide the dealer's complete diagnostic report, repair order, current vehicle mileage, and whether the customer has submitted a written return request. I will then update the risk assessment and investigation recommendation.",
+  "识别客户投诉中的风险信号，汇总客户、车辆与经销商信息，并提出下一步处理建议。": "Identify risk signals in the complaint, consolidate customer, vehicle, and dealer information, and recommend the next step.",
+  "客户来电转写、车辆 VIN 与客户主数据": "Customer call transcript, vehicle VIN, and customer master data",
+  "识别投诉风险，保留客户原话，并决定是否启动投诉调查流程。": "Identify complaint risk, preserve the customer's original words, and determine whether to start the complaint investigation process.",
+  "等待业务人员确认后，启动投诉调查并编排所需的信息补充与事实核验。": "Wait for business confirmation, then start the complaint investigation and orchestrate the required information collection and fact verification.",
+  "高风险投诉摘要与业务人员确认": "High-risk complaint summary and business confirmation",
+  "收到确认后启动投诉调查；如信息不足，先列出需要补充的材料。": "Start the complaint investigation after confirmation; if information is insufficient, list the required materials first.",
   "提交 Dealer 补件": "Submit Dealer Documents",
   "请从左侧当前任务提交 CCO 回写。": "Submit the CCO update from the active task on the left.",
   "点击节点查看计划与执行记录": "Select a node to view its plan and activity",

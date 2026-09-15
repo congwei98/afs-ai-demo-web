@@ -49,8 +49,8 @@ type Stage =
   | "complete"
   | "blocked";
 type AgentStatus = "waiting" | "running" | "done";
-type TaskView = "main" | "repair-query" | "repair-history" | "technical" | "mobility" | "warranty" | "legal" | "parts";
-type ApprovalTaskView = Exclude<TaskView, "main" | "repair-query">;
+type TaskView = "main" | "complaint-investigation" | "repair-query" | "repair-history" | "technical" | "mobility" | "warranty" | "legal" | "parts";
+type ApprovalTaskView = Exclude<TaskView, "main" | "complaint-investigation" | "repair-query">;
 type AgentKind = "agent" | "system" | "source";
 type MessageRole = "assistant" | "user" | "system";
 type MessageCard = { label: string; value: string; meta?: string };
@@ -60,6 +60,7 @@ type Message = {
   id: number;
   role: MessageRole;
   title?: string;
+  lead?: string;
   body: string;
   bullets?: string[];
   notes?: MessageNote[];
@@ -68,6 +69,7 @@ type Message = {
   visible: number;
   streaming?: boolean;
   tone?: "risk" | "approval";
+  showRecording?: boolean;
   actions?: string[];
 };
 type AgentNode = {
@@ -91,7 +93,7 @@ const processDefinitions: Record<Phase, { title: string; short: string; steps: s
 
 const baseGraphs: Record<Phase, AgentNode[]> = {
   intake: [
-    { id: "router", name: "Complaint Router", type: "Router Agent", kind: "agent", detail: "我在原话里听到了三个需要立即升级的信号：行驶中失去动力、同一问题修了五次、客户明确要求退车。综合判断，这是高风险投诉，建议先创建 CCO 案件保留原始语境。", evidence: "本次电话逐字稿、车辆 VIN 与客户主数据", instruction: "先完整听完来电，保留客户原话；再判断诉求、风险和应进入的业务流程。", x: 50, y: 48 },
+    { id: "router", name: "Complaint Leading Agent", type: "Leading Agent", kind: "agent", detail: "我在原话里听到了三个需要立即升级的信号：行驶中失去动力、同一问题修了五次、客户明确要求退车。综合判断，这是高风险投诉，建议先创建 CCO 案件保留原始语境。", evidence: "本次电话逐字稿、车辆 VIN 与客户主数据", instruction: "先完整听完来电，保留客户原话；再判断诉求、风险和应进入的业务流程。", x: 50, y: 48 },
     { id: "cco-execution", name: "CCO Case Execution Agent", type: "Execution Agent", kind: "agent", detail: "将客户原话、基础信息和投诉诉求写入 CCO，并创建当前投诉案件。", evidence: "已完成风险识别的投诉内容", instruction: "创建 CCO 投诉案件，并保留原始录音与客户诉求。", x: 50, y: 78 },
   ],
   retention: [
@@ -108,6 +110,31 @@ const baseGraphs: Record<Phase, AgentNode[]> = {
     { id: "writer", name: "CCO Result Writer", type: "Execution Agent", kind: "agent", detail: "审批结果为通过后，我把 CCA 决定、维修结果和客户关怀信息写回 CCO，并拿到了成功回执。当前案件可以闭环。", evidence: "审批决定 Approved、CCO 写入回执 WR-2026-0068", instruction: "确认审批已经完成后再回写 CCO；写完要检查回执，失败时不要把案件标记为完成。", x: 72, y: 58 },
   ],
 };
+
+const complaintInvestigationNodes: AgentNode[] = [
+  {
+    id: "complaint-leading",
+    name: "Complaint Leading Agent",
+    type: "Leading Agent",
+    kind: "agent",
+    detail: "识别客户投诉中的风险信号，汇总客户、车辆与经销商信息，并提出下一步处理建议。",
+    evidence: "客户来电转写、车辆 VIN 与客户主数据",
+    instruction: "识别投诉风险，保留客户原话，并决定是否启动投诉调查流程。",
+    x: 50,
+    y: 30,
+  },
+  {
+    id: "complaint-investigation-process",
+    name: "Compliant Investigation Process Agent",
+    type: "Process Agent",
+    kind: "agent",
+    detail: "等待业务人员确认后，启动投诉调查并编排所需的信息补充与事实核验。",
+    evidence: "高风险投诉摘要与业务人员确认",
+    instruction: "收到确认后启动投诉调查；如信息不足，先列出需要补充的材料。",
+    x: 50,
+    y: 70,
+  },
+];
 
 const graphExtras: Record<Phase, AgentNode[]> = {
   intake: [
@@ -146,6 +173,20 @@ const initialConclusion = "我已经听完这段投诉电话。廖女士描述�
 const initialMessages: Message[] = [
   { id: 1, role: "system", body: "后台处理完成｜来电已转写并完成风险识别", visible: 22 },
   { id: 2, role: "assistant", body: initialConclusion, visible: initialConclusion.length, tone: "risk", actions: ["请创建 CCO 投诉，并告诉我接下来如何处理"] },
+];
+
+const complaintInvestigationMessages: Message[] = [
+  { id: 1, role: "system", body: "后台处理完成｜来电已转写并完成风险识别", visible: 22 },
+  {
+    id: 2,
+    role: "assistant",
+    lead: "识别到一个高风险投诉。",
+    body: "客户廖女士于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上出现发动机抖动。经销商初步判断为点火线圈故障并建议维修，但客户认为新车存在质量问题，不接受维修并明确要求退车。",
+    visible: 0,
+    tone: "risk",
+    showRecording: false,
+    actions: ["Start Compliant Investigation", "要求补充更多信息"],
+  },
 ];
 
 const callTranscript = "客户（廖女士）：我 4 月 1 日在珠海锦泰宝汇买了一辆 BMW X5，今天刚提车回家，路上就发现发动机一直抖动。\n\nST：我们已经收到您的反馈。车辆现在已经送回经销商了吗？\n\n客户：是的，送回去检查了。他们说是点火线圈故障，需要换点火线圈。新车第一天就出这种问题，我认为是车辆质量有问题。\n\nST：我会完整记录本次投诉和经销商的检查结论。\n\n客户：我不接受维修，我要求退车。请尽快告诉我怎么处理。";
@@ -264,6 +305,11 @@ function ChatWorkbenchContent() {
   const [repairQueryVehicle, setRepairQueryVehicle] = useState("XXX");
   const [repairQueryStatus, setRepairQueryStatus] = useState<AgentStatus | null>(null);
   const [repairQueryNeedsDetail, setRepairQueryNeedsDetail] = useState(false);
+  const [complaintMessages, setComplaintMessages] = useState<Message[]>(complaintInvestigationMessages);
+  const [complaintAgentStates, setComplaintAgentStates] = useState<Record<string, AgentStatus>>({
+    "complaint-leading": "done",
+    "complaint-investigation-process": "waiting",
+  });
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repairQueryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -300,8 +346,8 @@ function ChatWorkbenchContent() {
     detail: repairQueryStatus === "done" ? `已查询 ${repairQueryVehicle} 的全部维修记录，共返回 ${mockRepairRecords.length} 条。` : "正在识别车辆标识并查询全部维修工单。",
     instruction: `查询 ${repairQueryVehicle} 的全部维修记录，并按时间顺序返回。`,
   }] : [], [repairQueryStatus, repairQueryVehicle]);
-  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : graphNodes;
-  const activeAgentStates = taskView === "repair-query" && repairQueryStatus ? { "adhoc-repair-history": repairQueryStatus } : agentStates;
+  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintInvestigationNodes : graphNodes;
+  const activeAgentStates = taskView === "repair-query" && repairQueryStatus ? { "adhoc-repair-history": repairQueryStatus } : taskView === "complaint-investigation" ? complaintAgentStates : agentStates;
   const selected = activeGraphNodes.find((node) => node.id === selectedNode) ?? activeGraphNodes[0];
 
   const clearTimers = () => {
@@ -610,12 +656,32 @@ function ChatWorkbenchContent() {
   };
 
   const mockLabel = stage === "waiting_repair" ? "维修与 CLAIM 回写" : stage === "waiting_supplement" ? "提交 Dealer 补件" : null;
-  const activeApproval = taskView === "main" || taskView === "repair-query" ? null : taskView;
+  const activeApproval = taskView === "main" || taskView === "complaint-investigation" || taskView === "repair-query" ? null : taskView;
   const activeApprovalDone = activeApproval ? approvals[activeApproval] : false;
   const approveActiveTask = () => {
     if (activeApproval === "repair-history" || activeApproval === "technical" || activeApproval === "mobility" || activeApproval === "warranty") approveAgentResult(activeApproval);
     else if (activeApproval === "legal") approveLegal();
     else if (activeApproval === "parts") approveParts();
+  };
+
+  const handleComplaintAction = (action: string) => {
+    const userMessage: Message = { id: Date.now(), role: "user", body: action, visible: action.length };
+    if (action === "Start Compliant Investigation") {
+      setComplaintMessages((current) => [...current, userMessage, {
+        id: Date.now() + 1,
+        role: "assistant",
+        body: "Compliant Investigation 已启动。我会先核实车辆故障、经销商检查结论与客户退车诉求，并在需要业务确认时发起补充信息请求。",
+        visible: 72,
+      }]);
+      setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "running" });
+      return;
+    }
+    setComplaintMessages((current) => [...current, userMessage, {
+      id: Date.now() + 1,
+      role: "assistant",
+      body: "请补充经销商完整检测报告、维修工单、车辆当前里程，以及客户是否已提交书面退车申请。收到后，我会更新投诉风险判断与调查建议。",
+      visible: 62,
+    }]);
   };
 
   return (
@@ -664,11 +730,11 @@ function ChatWorkbenchContent() {
 
         <section className={`chat-main ${taskView === "repair-query" ? "adhoc" : ""}`} aria-label={t("任务对话工作区")}>
           {taskView !== "repair-query" && <ProcessTracker
-            phase={phase}
-            stage={stage}
-            taskView={taskView}
+            phase={taskView === "complaint-investigation" ? "intake" : phase}
+            stage={taskView === "complaint-investigation" ? "classifying" : stage}
+            taskView={taskView === "complaint-investigation" ? "main" : taskView}
             approvalCompleted={activeApprovalDone}
-            progress={progress}
+            progress={taskView === "complaint-investigation" ? 0 : progress}
             history={history}
             graphView={graphView}
             onViewHistory={setGraphView}
@@ -703,34 +769,34 @@ function ChatWorkbenchContent() {
               <button type="submit" disabled={!canSend || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button>
             </div>
             </form>
-          </> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView("main")} />}
+          </> : taskView === "complaint-investigation" ? <ComplaintInvestigationTask messages={complaintMessages} onAction={handleComplaintAction} customerOpen={customerOpen} onToggleCustomer={() => setCustomerOpen((current) => !current)} profileReady={profileReady} /> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView("main")} />}
         </section>
 
         <AgentWorkspace
-          phase={displayPhase}
-          currentPhase={phase}
+          phase={taskView === "complaint-investigation" ? "intake" : displayPhase}
+          currentPhase={taskView === "complaint-investigation" ? "intake" : phase}
           nodes={activeGraphNodes}
-          readOnly={readOnlyGraph}
+          readOnly={taskView === "complaint-investigation" ? false : readOnlyGraph}
           onExpand={() => { setSelectedNode(activeGraphNodes[0]?.id ?? null); setGraphOpen(true); }}
           drawer={drawer === "agents"}
           onClose={() => setDrawer(null)}
-          stage={stage}
+          stage={taskView === "complaint-investigation" ? "classifying" : stage}
           statuses={activeAgentStates}
           onOpenNode={(id) => { setSelectedNode(id); setGraphOpen(true); }}
         />
       </div>
 
       {graphOpen && <AgentGraphModal
-        phase={displayPhase}
-        title={taskView === "repair-query" ? "车辆维修记录查询" : processDefinitions[displayPhase].title}
+        phase={taskView === "complaint-investigation" ? "intake" : displayPhase}
+        title={taskView === "repair-query" ? "车辆维修记录查询" : taskView === "complaint-investigation" ? "Compliant Investigation" : processDefinitions[displayPhase].title}
         nodes={activeGraphNodes}
         selected={selected}
-        readOnly={readOnlyGraph}
-        enabledExtras={enabledExtras[displayPhase]}
+        readOnly={taskView === "complaint-investigation" ? false : readOnlyGraph}
+        enabledExtras={taskView === "complaint-investigation" ? [] : enabledExtras[displayPhase]}
         onSelect={setSelectedNode}
         onToggleExtra={(id) => setEnabledExtras((current) => ({ ...current, [displayPhase]: current[displayPhase].includes(id) ? current[displayPhase].filter((item) => item !== id) : [...current[displayPhase], id] }))}
         onClose={() => setGraphOpen(false)}
-        stage={stage}
+        stage={taskView === "complaint-investigation" ? "classifying" : stage}
         statuses={activeAgentStates}
         instructionValue={selected ? agentInstructions[selected.id] ?? selected.instruction : ""}
         onInstructionChange={(value) => selected && setAgentInstructions((current) => ({ ...current, [selected.id]: value }))}
@@ -773,18 +839,20 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const visiblePending = showAll ? [...createdTasks, ...pendingTaskItems] : [...createdTasks, ...pendingTaskItems].slice(0, 4);
   const visibleCompleted = showAll ? completedTaskItems : completedTaskItems.slice(0, 2);
-  const totalTasks = 1 + pendingTaskItems.length + completedTaskItems.length + approvalTasks.length + completedApprovalTasks.length + createdTasks.length;
+  const totalTasks = 2 + pendingTaskItems.length + completedTaskItems.length + approvalTasks.length + completedApprovalTasks.length + createdTasks.length;
   const createTask = () => {
     setCreatedTasks((current) => current.length ? current : [{ id: "repair-query", title: "新建任务", status: "待处理" }]);
     onCreateTask();
   };
   const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span title={t(currentTitle)}>{t(currentTitle)}</span><b title={t(currentStatus)}>{compactStatus(currentStatus)}</b></button>;
+  const investigationTask = <button className={`task-list-item primary risk-task ${taskView === "complaint-investigation" ? "active" : ""}`} onClick={() => onSelectTask("complaint-investigation")}><WarningCircle size={18} weight="fill" /><span title={t("高风险投诉调查｜廖女士")}>{t("高风险投诉调查｜廖女士")}</span><b title={t("待处理")}>{compactStatus("待处理")}</b></button>;
   return <aside id="workbench-tasks" className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label={t("任务列表")}>
     <header><div><span>{t("任务中心")}</span><strong>{totalTasks}{t(" 个任务")}</strong></div><button className="drawer-close" onClick={onClose} aria-label={t("关闭任务列表")}><X size={20} /></button></header>
     <button className="new-task-button" onClick={createTask}><Plus size={17} />{t("新建任务")}</button>
     {isStarted && !isFinished && <><div className="task-section-label">{t("进行中")}</div>{demoTask}{mockLabel && <button className="mock-task-button" onClick={onMock}>{t(mockLabel)}<ArrowRight size={16} /></button>}</>}
     <div className="task-section-label">{t("待处理")}</div>
     {!isStarted && demoTask}
+    {investigationTask}
     {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("需审批")}>{compactStatus("需审批")}</b></button>)}
     {visiblePending.map((task) => <button className={`task-list-item ${task.id === "repair-query" && taskView === "repair-query" ? "active" : ""}`} key={task.id} onClick={() => task.id === "repair-query" && onSelectTask("repair-query")}><span title={task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}>{task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}</span><b>{compactStatus(task.id === "repair-query" ? repairQueryStatus === "done" ? "已完成" : repairQueryStatus === "running" ? "处理中" : task.status : task.status)}</b></button>)}
     <div className="task-section-label">{t("已完成")}</div>
@@ -793,6 +861,21 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
     {visibleCompleted.map((task) => <button className="task-list-item muted" key={task.id}><span title={t(task.title)}>{t(task.title)}</span><b title={t(task.status)}>{compactStatus(task.status)}</b></button>)}
     <button className="show-all-tasks" onClick={() => setShowAll((current) => !current)}>{showAll ? t("收起任务列表") : `${t("展开完整列表")} (${totalTasks})`}<CaretDown size={15} /></button>
   </aside>;
+}
+
+function ComplaintInvestigationTask({ messages, onAction, customerOpen, onToggleCustomer, profileReady }: { messages: Message[]; onAction: (value: string) => void; customerOpen: boolean; onToggleCustomer: () => void; profileReady: boolean }) {
+  const { t } = useLanguage();
+  const actionsDisabled = messages.length > complaintInvestigationMessages.length;
+  return <>
+    <CustomerCard open={customerOpen} onToggle={onToggleCustomer} ready={profileReady} />
+    <div className="chat-thread" aria-live="polite">
+      <div className="chat-thread-heading"><div><span><Sparkle size={17} weight="fill" /></span><div><b>{t("AI 协作对话")}</b></div></div></div>
+      <div className="chat-messages">
+        {messages.map((message) => <ChatMessage key={message.id} message={message} onAction={onAction} actionsDisabled={actionsDisabled} />)}
+      </div>
+    </div>
+    <div className="chat-composer complaint-investigation-composer" aria-label={t("当前步骤无需输入")}><div><input value="" readOnly disabled placeholder="Do anything" /><button type="button" disabled aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div></div>
+  </>;
 }
 
 function RepairQueryTask({ input, onInput, request, vehicle, status, needsDetail, onSubmit }: { input: string; onInput: (value: string) => void; request: string | null; vehicle: string; status: AgentStatus | null; needsDetail: boolean; onSubmit: (event: FormEvent) => void }) {
@@ -932,12 +1015,13 @@ function ChatMessage({ message, onAction, actionsDisabled }: { message: Message;
     {message.role === "assistant" && <span className="message-avatar"><Robot size={36} /></span>}
     <div>
       {message.role !== "assistant" && message.title && <h3>{t(message.title)}</h3>}
+      {message.lead && <strong className="message-lead">{t(message.lead)}</strong>}
       <p>{visibleBody}{message.streaming && <i className="stream-cursor" />}</p>
       {!message.streaming && message.plan && <div className="ai-plan-table"><table><thead><tr><th>{t("目标")}</th><th>{t("执行动作")}</th><th>{t("预期产出")}</th></tr></thead><tbody>{message.plan.map((row) => <tr key={row.purpose}><td>{t(row.purpose)}</td><td>{t(row.action)}</td><td>{t(row.expected)}</td></tr>)}</tbody></table></div>}
       {!message.streaming && message.bullets && <ul>{message.bullets.map((item) => <li key={item}>{t(item)}</li>)}</ul>}
       {!message.streaming && message.notes && <div className="ai-notes">{message.notes.map((note) => <p key={`${note.label}-${note.text}`}>{t(note.text)}</p>)}</div>}
       {!message.streaming && message.card && <p className="ai-result">{t(message.card.label)}: {t(message.card.value)}{message.card.meta && ` (${t(message.card.meta)})`}</p>}
-      {message.tone === "risk" && <CallRecording />}
+      {message.tone === "risk" && message.showRecording !== false && <CallRecording />}
     </div>
     {!message.streaming && message.actions?.length && <nav className="message-actions" aria-label={t("AI 建议操作")}>{message.actions.map((action) => <button key={action} disabled={actionsDisabled} onClick={() => onAction(action)}>{t(action)}</button>)}</nav>}
   </article>;
