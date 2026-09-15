@@ -14,8 +14,18 @@ test("complaint investigation task keeps the requested first-turn experience", (
 });
 
 test("investigation agent appears only after the start action", () => {
-  assert.match(workbench, /node\.id === "complaint-leading" \|\| complaintInvestigationStarted/);
+  assert.match(workbench, /if \(!complaintInvestigationStarted\) return complaintInvestigationNodes\.filter/);
   assert.match(workbench, /setComplaintInvestigationStarted\(true\)/);
+});
+
+test("complaint task is the refreshed default and supports the same FRD plan update", () => {
+  assert.match(workbench, /useState<TaskView>\("complaint-investigation"\)/);
+  assert.match(workbench, /startComplaintInvestigationTask\(\);/);
+  assert.match(workbench, /plan: retentionPlan/);
+  assert.match(workbench, /plan: updatedRetentionPlan/);
+  assert.match(workbench, /FRD 保修开始日和当前里程加入待执行计划/);
+  assert.match(workbench, /complaint-investigation-command/);
+  assert.match(workbench, /complaintPlanAgentsVisible/);
 });
 
 test("routers are presented as leading agents with an investigation process agent", () => {

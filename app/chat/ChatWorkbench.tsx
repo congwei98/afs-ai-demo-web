@@ -291,7 +291,7 @@ function ChatWorkbenchContent() {
   const [dealerModal, setDealerModal] = useState<"repair" | "supplement" | null>(null);
   const [documentsComplete, setDocumentsComplete] = useState(true);
   const [drawer, setDrawer] = useState<"tasks" | "agents" | null>(null);
-  const [taskView, setTaskView] = useState<TaskView>("main");
+  const [taskView, setTaskView] = useState<TaskView>("complaint-investigation");
   const [agentStates, setAgentStates] = useState<Record<string, AgentStatus>>({ router: "running" });
   const [approvals, setApprovals] = useState({ "repair-history": false, technical: false, mobility: false, warranty: false, legal: false, parts: false });
   const [partsReady] = useState(false);
@@ -310,10 +310,15 @@ function ChatWorkbenchContent() {
     "complaint-leading": "waiting",
   });
   const [complaintInvestigationStarted, setComplaintInvestigationStarted] = useState(false);
+  const [complaintPlanAgentsVisible, setComplaintPlanAgentsVisible] = useState(false);
+  const [complaintWarrantyRequested, setComplaintWarrantyRequested] = useState(false);
+  const [complaintInput, setComplaintInput] = useState("");
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const repairQueryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const complaintTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const complaintNextId = useRef(2);
+  const complaintInitialStarted = useRef(false);
   const messageEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const initialStarted = useRef(false);
@@ -347,7 +352,14 @@ function ChatWorkbenchContent() {
     detail: repairQueryStatus === "done" ? `已查询 ${repairQueryVehicle} 的全部维修记录，共返回 ${mockRepairRecords.length} 条。` : "正在识别车辆标识并查询全部维修工单。",
     instruction: `查询 ${repairQueryVehicle} 的全部维修记录，并按时间顺序返回。`,
   }] : [], [repairQueryStatus, repairQueryVehicle]);
-  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintInvestigationNodes.filter((node) => node.id === "complaint-leading" || complaintInvestigationStarted) : graphNodes;
+  const complaintGraphNodes = useMemo(() => {
+    if (!complaintInvestigationStarted) return complaintInvestigationNodes.filter((node) => node.id === "complaint-leading");
+    return [
+      ...complaintInvestigationNodes,
+      ...baseGraphs.retention.filter((node) => node.id === "retention" || (complaintPlanAgentsVisible && node.id !== "customer-care" && (complaintWarrantyRequested || node.id !== "warranty"))),
+    ];
+  }, [complaintInvestigationStarted, complaintPlanAgentsVisible, complaintWarrantyRequested]);
+  const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintGraphNodes : graphNodes;
   const activeAgentStates = taskView === "repair-query" && repairQueryStatus ? { "adhoc-repair-history": repairQueryStatus } : taskView === "complaint-investigation" ? complaintAgentStates : agentStates;
   const selected = activeGraphNodes.find((node) => node.id === selectedNode) ?? activeGraphNodes[0];
 
@@ -371,6 +383,10 @@ function ChatWorkbenchContent() {
   const startComplaintInvestigationTask = () => {
     clearComplaintTimers();
     setComplaintInvestigationStarted(false);
+    setComplaintPlanAgentsVisible(false);
+    setComplaintWarrantyRequested(false);
+    setComplaintInput("");
+    complaintNextId.current = 2;
     setComplaintAgentStates({ "complaint-leading": "running" });
     setComplaintMessages(complaintInvestigationMessages.map((message) => ({ ...message, visible: 0, streaming: true })));
     let visible = 0;
@@ -386,6 +402,31 @@ function ChatWorkbenchContent() {
     };
     complaintTimers.current.push(setTimeout(streamResponse, 180));
   };
+
+  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; actions?: string[]; onDone?: () => void }) => {
+    const id = complaintNextId.current++;
+    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, actions: options?.actions, visible: 0, streaming: true }]);
+    let visible = 0;
+    const tick = () => {
+      visible += 1;
+      setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, visible } : message));
+      if (visible < body.length) {
+        complaintTimers.current.push(setTimeout(tick, 30));
+        return;
+      }
+      setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, visible: body.length, streaming: false } : message));
+      options?.onDone?.();
+    };
+    complaintTimers.current.push(setTimeout(tick, 180));
+  };
+
+  useEffect(() => {
+    if (complaintInitialStarted.current) return;
+    complaintInitialStarted.current = true;
+    startComplaintInvestigationTask();
+    // The starter intentionally runs once per page load so refresh always begins in this task.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (initialStarted.current) return;
@@ -691,24 +732,51 @@ function ChatWorkbenchContent() {
   };
 
   const handleComplaintAction = (action: string) => {
-    const userMessage: Message = { id: Date.now(), role: "user", body: action, visible: action.length };
+    const userMessage: Message = { id: complaintNextId.current++, role: "user", body: action, visible: action.length };
     if (action === "Start Compliant Investigation") {
-      setComplaintMessages((current) => [...current, userMessage, {
-        id: Date.now() + 1,
-        role: "assistant",
-        body: "Compliant Investigation 已启动。我会先核实车辆故障、经销商检查结论与客户退车诉求，并在需要业务确认时发起补充信息请求。",
-        visible: 72,
-      }]);
+      setComplaintMessages((current) => [...current, userMessage]);
       setComplaintInvestigationStarted(true);
       setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "running" });
+      streamComplaintAssistant("我推荐按下面的顺序执行。\n\n客户在购车当日就发现故障，因此先核实购车日附近的维修工单，确认客户提供的故障信息与经销商记录是否一致。随后查询已登记的维修方案，明确后续修复安排。\n\n维修期间的出行安排也会影响客户是否愿意继续沟通，因此我会查询经销商是否有可用代步车。", {
+        plan: retentionPlan,
+        actions: ["按建议开始"],
+        onDone: () => {
+          setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "done", retention: "done", "repair-history": "waiting", technical: "waiting", mobility: "waiting" });
+          setComplaintPlanAgentsVisible(true);
+        },
+      });
+      return;
+    }
+    if (action === "按建议开始") {
+      setComplaintMessages((current) => [...current, userMessage]);
+      setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
+      streamComplaintAssistant("我已按确认后的计划启动 Data Agent 查询。", { onDone: () => setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", ...(complaintWarrantyRequested ? { warranty: "done" } : {}) })) });
       return;
     }
     setComplaintMessages((current) => [...current, userMessage, {
-      id: Date.now() + 1,
+      id: complaintNextId.current++,
       role: "assistant",
       body: "请补充经销商完整检测报告、维修工单、车辆当前里程，以及客户是否已提交书面退车申请。收到后，我会更新投诉风险判断与调查建议。",
       visible: 62,
     }]);
+  };
+
+  const submitComplaintInput = (event: FormEvent) => {
+    event.preventDefault();
+    const value = complaintInput.trim();
+    if (!value || !complaintInvestigationStarted) return;
+    setComplaintInput("");
+    setComplaintMessages((current) => [...current, { id: complaintNextId.current++, role: "user", body: value, visible: value.length }]);
+    setComplaintAgentStates((current) => ({ ...current, retention: "running", warranty: "waiting" }));
+    streamComplaintAssistant(`我已收到你的补充：“${value}”。\n\n我已将 FRD 保修开始日和当前里程加入待执行计划。它们会与购车日附近的维修工单、维修方案和代步车可用性一并核对；目前尚未发起数据查询。下面是更新后的计划，请确认后开始执行。`, {
+      plan: updatedRetentionPlan,
+      actions: ["按建议开始"],
+      onDone: () => {
+        setComplaintWarrantyRequested(true);
+        setComplaintPlanAgentsVisible(true);
+        setComplaintAgentStates((current) => ({ ...current, retention: "done", warranty: "waiting" }));
+      },
+    });
   };
 
   return (
@@ -796,7 +864,7 @@ function ChatWorkbenchContent() {
               <button type="submit" disabled={!canSend || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button>
             </div>
             </form>
-          </> : taskView === "complaint-investigation" ? <ComplaintInvestigationTask messages={complaintMessages} onAction={handleComplaintAction} customerOpen={customerOpen} onToggleCustomer={() => setCustomerOpen((current) => !current)} profileReady={profileReady} /> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView("main")} />}
+          </> : taskView === "complaint-investigation" ? <ComplaintInvestigationTask messages={complaintMessages} onAction={handleComplaintAction} input={complaintInput} onInput={setComplaintInput} onSubmit={submitComplaintInput} investigationStarted={complaintInvestigationStarted} customerOpen={customerOpen} onToggleCustomer={() => setCustomerOpen((current) => !current)} profileReady={profileReady} /> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView("main")} />}
         </section>
 
         <AgentWorkspace
@@ -890,18 +958,21 @@ function TaskSidebar({ stage, taskView, approvals, onSelectTask, onCreateTask, r
   </aside>;
 }
 
-function ComplaintInvestigationTask({ messages, onAction, customerOpen, onToggleCustomer, profileReady }: { messages: Message[]; onAction: (value: string) => void; customerOpen: boolean; onToggleCustomer: () => void; profileReady: boolean }) {
+function ComplaintInvestigationTask({ messages, onAction, input, onInput, onSubmit, investigationStarted, customerOpen, onToggleCustomer, profileReady }: { messages: Message[]; onAction: (value: string) => void; input: string; onInput: (value: string) => void; onSubmit: (event: FormEvent) => void; investigationStarted: boolean; customerOpen: boolean; onToggleCustomer: () => void; profileReady: boolean }) {
   const { t } = useLanguage();
-  const actionsDisabled = messages.length > complaintInvestigationMessages.length;
+  const latestActionMessageId = [...messages].reverse().find((message) => message.actions?.length)?.id;
   return <>
     <CustomerCard open={customerOpen} onToggle={onToggleCustomer} ready={profileReady} />
     <div className="chat-thread" aria-live="polite">
       <div className="chat-thread-heading"><div><span><Sparkle size={17} weight="fill" /></span><div><b>{t("AI 协作对话")}</b></div></div></div>
       <div className="chat-messages">
-        {messages.map((message) => <ChatMessage key={message.id} message={message} onAction={onAction} actionsDisabled={actionsDisabled} />)}
+        {messages.map((message) => <ChatMessage key={message.id} message={message} onAction={onAction} actionsDisabled={message.id !== latestActionMessageId} />)}
       </div>
     </div>
-    <div className="chat-composer complaint-investigation-composer" aria-label={t("当前步骤无需输入")}><div><input value="" readOnly disabled placeholder="Do anything" /><button type="button" disabled aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div></div>
+    <form className="chat-composer complaint-investigation-composer" onSubmit={onSubmit} aria-busy={!investigationStarted}>
+      <label className="sr-only" htmlFor="complaint-investigation-command">{t("补充调查信息")}</label>
+      <div><input id="complaint-investigation-command" value={input} onChange={(event) => onInput(event.target.value)} disabled={!investigationStarted} placeholder={investigationStarted ? "例如：FRD 保修开始日为 2026-04-03，Mileage 为 91 km" : "Start investigation 后可补充 FRD 和 Mileage"} /><button type="submit" disabled={!investigationStarted || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div>
+    </form>
   </>;
 }
 
