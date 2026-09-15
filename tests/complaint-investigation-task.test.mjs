@@ -38,6 +38,14 @@ test("completed complaint data checks create Technical and Mobility confirmation
   assert.match(workbench, /更正信息/);
 });
 
+test("approved department tasks return a Complaint Knowledge Agent recommendation", () => {
+  assert.match(workbench, /Complaint Knowledge Agent/);
+  assert.match(workbench, /整体费用为 8300 RMB/);
+  assert.match(workbench, /7000 到 9500 RMB/);
+  assert.match(workbench, /actions: \["同意方案", "更新方案"\]/);
+  assert.match(workbench, /placeholder="Do anything"/);
+});
+
 test("routers are presented as leading agents with an investigation process agent", () => {
   assert.doesNotMatch(workbench, /type: "Router Agent"/);
   assert.match(workbench, /name: "Complaint Leading Agent"/);
