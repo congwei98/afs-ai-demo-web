@@ -168,11 +168,11 @@ const mockRepairRecords: RepairRecord[] = [
   { date: "2026-04-08", dealer: "珠海锦泰宝汇", mileage: "98 km", type: "质量检查", details: "完成故障码清除及道路测试，发动机运行正常。", status: "已完成" },
 ];
 
-const initialConclusion = "我已经听完这段投诉电话。廖女士描述，她于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上便出现发动机抖动。\n\n这是一项发生在新车交付当天的质量投诉，且客户已明确提出退车。为了完整保留录音、经销商检查结论和客户诉求，我建议先创建 CCO 高风险退车投诉案例，用于跟进当前客诉。";
+const initialConclusion = "我已经听完这段客户来电。廖女士描述，她于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上便出现发动机抖动。\n\n这是一项发生在新车交付当天的质量投诉，且客户已明确提出退车。为了完整保留录音、经销商检查结论和客户诉求，我建议先创建 CCO 高风险退车投诉案例，用于跟进当前客诉。";
 
 const initialMessages: Message[] = [
   { id: 1, role: "system", body: "后台处理完成｜来电已转写并完成风险识别", visible: 22 },
-  { id: 2, role: "assistant", body: initialConclusion, visible: initialConclusion.length, tone: "risk", actions: ["请创建 CCO 投诉，并告诉我接下来如何处理"] },
+  { id: 2, role: "assistant", body: initialConclusion, visible: 0, streaming: true, tone: "risk", actions: ["请创建 CCO 投诉，并告诉我接下来如何处理"] },
 ];
 
 const complaintInvestigationMessages: Message[] = [
@@ -248,20 +248,6 @@ function progressFor(stage: Stage): number {
   return map[stage];
 }
 
-function stagePrompt(stage: Stage) {
-  const prompts: Partial<Record<Stage, string>> = {
-    ready_create: "请创建 CCO 投诉",
-    ready_retention: "启动维修挽留流程",
-    waiting_plan_confirmation: "可补充信息，或按建议开始",
-    ready_investigation: "按建议运行调查",
-    ready_solution: "确认生成客户补偿方案与沟通话术",
-    waiting_customer: "例如：沟通完成，客户接受方案",
-    ready_claim: "启动 CCA 审批",
-    ready_approval: "批准并回写结果",
-  };
-  return prompts[stage] ?? "当前步骤无需输入";
-}
-
 function repairQueryVehicleFrom(value: string) {
   const chinese = value.match(/(?:查询|查一下|查)\s*(.+?)(?:车|车辆)(?:的)?(?:所有|全部)?维修记录/i);
   if (chinese?.[1]) return chinese[1].trim();
@@ -292,7 +278,8 @@ function ChatWorkbenchContent() {
   const [documentsComplete, setDocumentsComplete] = useState(true);
   const [drawer, setDrawer] = useState<"tasks" | "agents" | null>(null);
   const [taskView, setTaskView] = useState<TaskView>("complaint-investigation");
-  const [agentStates, setAgentStates] = useState<Record<string, AgentStatus>>({ router: "running" });
+  const [agentStates, setAgentStates] = useState<Record<string, AgentStatus>>({});
+  const [routerVisible, setRouterVisible] = useState(false);
   const [approvals, setApprovals] = useState({ "repair-history": false, technical: false, mobility: false, warranty: false, legal: false, parts: false });
   const [partsReady] = useState(false);
   const [warrantyRequested, setWarrantyRequested] = useState(false);
@@ -314,6 +301,7 @@ function ChatWorkbenchContent() {
   const [complaintWarrantyRequested, setComplaintWarrantyRequested] = useState(false);
   const [complaintConfirmationsReady, setComplaintConfirmationsReady] = useState(false);
   const [complaintApprovals, setComplaintApprovals] = useState({ technical: false, mobility: false });
+  const [complaintKnowledgeVisible, setComplaintKnowledgeVisible] = useState(false);
   const [complaintInput, setComplaintInput] = useState("");
   const nextId = useRef(3);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -338,7 +326,7 @@ function ChatWorkbenchContent() {
 
   const graphNodes = useMemo(() => {
     const extras = graphExtras[displayPhase].filter((node) => enabledExtras[displayPhase].includes(node.id));
-    const baseNodes = displayPhase === "intake" ? baseGraphs.intake.filter((node) => node.id !== "cco-execution" || ccoExecutionVisible) : displayPhase === "retention" ? baseGraphs.retention.filter((node) => node.id === "retention" || (node.id === "customer-care" ? careAgentVisible : planAgentsVisible && (warrantyRequested || node.id !== "warranty"))) : baseGraphs[displayPhase];
+    const baseNodes = displayPhase === "intake" ? baseGraphs.intake.filter((node) => (node.id === "router" ? routerVisible : node.id !== "cco-execution" || ccoExecutionVisible)) : displayPhase === "retention" ? baseGraphs.retention.filter((node) => node.id === "retention" || (node.id === "customer-care" ? careAgentVisible : planAgentsVisible && (warrantyRequested || node.id !== "warranty"))) : baseGraphs[displayPhase];
     const nodes = [...baseNodes, ...extras];
     // Introduce the cross-process handoff only when it starts; retain it afterward.
     if (displayPhase === "retention") {
@@ -347,7 +335,7 @@ function ChatWorkbenchContent() {
     }
     if (displayPhase === "claim") return [...nodes.map((node) => node.id === "claim-process" ? { ...node, name: "Claim Process", x: 50, y: 38 } : node.id === "ocr" || node.id === "writer" ? { ...node, y: 70 } : node), { ...baseGraphs.retention[0], x: 18, y: 15 }];
     return nodes;
-  }, [displayPhase, enabledExtras, agentStates, warrantyRequested, planAgentsVisible, careAgentVisible, ccoExecutionVisible]);
+  }, [displayPhase, enabledExtras, agentStates, warrantyRequested, planAgentsVisible, careAgentVisible, ccoExecutionVisible, routerVisible]);
 
   const repairQueryNodes = useMemo(() => repairQueryStatus ? [{
     ...repairQueryAgent,
@@ -359,8 +347,9 @@ function ChatWorkbenchContent() {
     return [
       ...complaintInvestigationNodes,
       ...baseGraphs.retention.filter((node) => node.id === "retention" || (complaintPlanAgentsVisible && node.id !== "customer-care" && (complaintWarrantyRequested || node.id !== "warranty"))),
+      ...(complaintKnowledgeVisible ? [{ ...baseGraphs.retention.find((node) => node.id === "customer-care")!, id: "complaint-knowledge", name: "Complaint Knowledge Agent" }] : []),
     ];
-  }, [complaintInvestigationStarted, complaintPlanAgentsVisible, complaintWarrantyRequested]);
+  }, [complaintInvestigationStarted, complaintPlanAgentsVisible, complaintWarrantyRequested, complaintKnowledgeVisible]);
   const activeGraphNodes = taskView === "repair-query" ? repairQueryNodes : taskView === "complaint-investigation" ? complaintGraphNodes : graphNodes;
   const activeAgentStates = taskView === "repair-query" && repairQueryStatus ? { "adhoc-repair-history": repairQueryStatus } : taskView === "complaint-investigation" ? complaintAgentStates : agentStates;
   const selected = activeGraphNodes.find((node) => node.id === selectedNode) ?? activeGraphNodes[0];
@@ -389,6 +378,7 @@ function ChatWorkbenchContent() {
     setComplaintWarrantyRequested(false);
     setComplaintConfirmationsReady(false);
     setComplaintApprovals({ technical: false, mobility: false });
+    setComplaintKnowledgeVisible(false);
     setComplaintInput("");
     complaintNextId.current = 2;
     setComplaintAgentStates({ "complaint-leading": "running" });
@@ -435,12 +425,30 @@ function ChatWorkbenchContent() {
   useEffect(() => {
     if (initialStarted.current) return;
     initialStarted.current = true;
-    timers.current.push(setTimeout(() => {
-      setProfileReady(true);
-      setAgentStates({ router: "done" });
-      setStage("ready_create");
-      setBusy(false);
-    }, 650));
+    timers.current.push(setTimeout(() => setProfileReady(true), 420));
+    let visible = 0;
+    let routerStarted = false;
+    const triggerRouterAt = initialConclusion.indexOf("投诉") + "投诉".length;
+    const streamInitialResponse = () => {
+      visible += 1;
+      setMessages((current) => current.map((message) => message.id === 2 ? { ...message, visible } : message));
+      if (!routerStarted && visible >= triggerRouterAt) {
+        routerStarted = true;
+        setRouterVisible(true);
+        setAgentStates({ router: "running" });
+      }
+      if (visible < initialConclusion.length) {
+        timers.current.push(setTimeout(streamInitialResponse, 28));
+        return;
+      }
+      setMessages((current) => current.map((message) => message.id === 2 ? { ...message, streaming: false, visible: initialConclusion.length } : message));
+      timers.current.push(setTimeout(() => {
+        setAgentStates({ router: "done" });
+        setStage("ready_create");
+        setBusy(false);
+      }, 480));
+    };
+    timers.current.push(setTimeout(streamInitialResponse, 180));
   }, []);
 
   useEffect(() => {
@@ -727,9 +735,26 @@ function ChatWorkbenchContent() {
   };
 
   const mockLabel = stage === "waiting_repair" ? "维修与 CLAIM 回写" : stage === "waiting_supplement" ? "提交 Dealer 补件" : null;
+  const complaintApprovalTask = complaintConfirmationsReady && (taskView === "technical" || taskView === "mobility") ? taskView : null;
   const activeApproval = taskView === "main" || taskView === "complaint-investigation" || taskView === "repair-query" ? null : taskView;
-  const activeApprovalDone = activeApproval ? approvals[activeApproval] : false;
+  const activeApprovalDone = complaintApprovalTask ? complaintApprovals[complaintApprovalTask] : activeApproval ? approvals[activeApproval] : false;
   const approveActiveTask = () => {
+    if (complaintApprovalTask) {
+      setComplaintApprovals((current) => {
+        const next = { ...current, [complaintApprovalTask]: true };
+        if (next.technical && next.mobility) {
+          setComplaintKnowledgeVisible(true);
+          setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
+          streamComplaintAssistant("Complaint Knowledge Agent 已汇总已确认的维修方案、代步车资源与历史案例。\n\n当前经销商和客户达成一致的补偿方案是：提供一年延保、一次发动机保养、两次机油保养，并提供代步车。整体费用为 8300 RMB。\n\n基于历史案例，类似车型和故障的补偿金额在 7000 到 9500 RMB 之间，因此建议通过审批。", {
+            actions: ["同意方案", "更新方案"],
+            onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
+          });
+        }
+        return next;
+      });
+      setComplaintAgentStates((current) => ({ ...current, [complaintApprovalTask]: "done" }));
+      return;
+    }
     if (activeApproval === "repair-history" || activeApproval === "technical" || activeApproval === "mobility" || activeApproval === "warranty") approveAgentResult(activeApproval);
     else if (activeApproval === "legal") approveLegal();
     else if (activeApproval === "parts") approveParts();
@@ -760,6 +785,16 @@ function ChatWorkbenchContent() {
           setComplaintConfirmationsReady(true);
         },
       });
+      return;
+    }
+    if (action === "同意方案") {
+      setComplaintMessages((current) => [...current, userMessage]);
+      streamComplaintAssistant("方案已同意。我会将补偿方案提交审批，并保留经销商与客户已达成一致的记录。", {});
+      return;
+    }
+    if (action === "更新方案") {
+      setComplaintMessages((current) => [...current, userMessage]);
+      streamComplaintAssistant("请在下方说明需要调整的补偿项目或金额，我会基于历史案例更新方案。", {});
       return;
     }
     setComplaintMessages((current) => [...current, userMessage, {
@@ -812,7 +847,7 @@ function ChatWorkbenchContent() {
           approvals={approvals}
           complaintConfirmationsReady={complaintConfirmationsReady}
           complaintApprovals={complaintApprovals}
-          onSelectTask={(task) => { if (task === "complaint-investigation") startComplaintInvestigationTask(); setTaskView(task); setDrawer(null); setGraphOpen(false); setSelectedNode(null); }}
+          onSelectTask={(task) => { if (task === "complaint-investigation" && !complaintInvestigationStarted) startComplaintInvestigationTask(); setTaskView(task); setDrawer(null); setGraphOpen(false); setSelectedNode(null); }}
           onCreateTask={() => {
             if (repairQueryTimer.current) clearTimeout(repairQueryTimer.current);
             setTaskView("repair-query");
@@ -986,7 +1021,7 @@ function ComplaintInvestigationTask({ messages, onAction, input, onInput, onSubm
     </div>
     <form className="chat-composer complaint-investigation-composer" onSubmit={onSubmit} aria-busy={!investigationStarted}>
       <label className="sr-only" htmlFor="complaint-investigation-command">{t("补充调查信息")}</label>
-      <div><input id="complaint-investigation-command" value={input} onChange={(event) => onInput(event.target.value)} disabled={!investigationStarted} placeholder={investigationStarted ? "例如：FRD 保修开始日为 2026-04-03，Mileage 为 91 km" : "Start investigation 后可补充 FRD 和 Mileage"} /><button type="submit" disabled={!investigationStarted || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div>
+      <div><input id="complaint-investigation-command" value={input} onChange={(event) => onInput(event.target.value)} disabled={!investigationStarted} placeholder="Do anything" /><button type="submit" disabled={!investigationStarted || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button></div>
     </form>
   </>;
 }
@@ -1187,18 +1222,39 @@ function CallRecording() {
 
 function AgentWorkspace({ phase, currentPhase, nodes, readOnly, onExpand, onOpenNode, drawer, onClose, stage, statuses }: { phase: Phase; currentPhase: Phase; nodes: AgentNode[]; readOnly: boolean; onExpand: () => void; onOpenNode: (id: string) => void; drawer: boolean; onClose: () => void; stage: Stage; statuses: Record<string, AgentStatus> }) {
   const { t } = useLanguage();
-  return <aside className={`agent-workspace ${drawer ? "drawer-open" : ""}`} aria-label={t("AI Agent编排器")}>
+  const workspaceRef = useRef<HTMLElement>(null);
+  const runningAgentRef = useRef<HTMLButtonElement>(null);
+  const lastScrolledAgentRef = useRef<string | null>(null);
+  const agents = nodes.filter((node) => node.kind === "agent");
+  const runningAgent = agents.find((node, index) => agentStatus(index, stage, statuses, node.id) === "running");
+  const runningAgentId = runningAgent?.id;
+
+  useEffect(() => {
+    if (!runningAgentId || lastScrolledAgentRef.current === runningAgentId) return;
+    const workspace = workspaceRef.current;
+    const target = runningAgentRef.current;
+    if (!workspace || !target) return;
+
+    const workspaceBounds = workspace.getBoundingClientRect();
+    const targetBounds = target.getBoundingClientRect();
+    const top = workspace.scrollTop + targetBounds.top - workspaceBounds.top - (workspace.clientHeight - target.clientHeight) / 2;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    workspace.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? "auto" : "smooth" });
+    lastScrolledAgentRef.current = runningAgentId;
+  }, [runningAgentId]);
+
+  return <aside ref={workspaceRef} className={`agent-workspace ${drawer ? "drawer-open" : ""}`} aria-label={t("AI Agent编排器")}>
     <header><div><strong>{t("AI Agent编排器")}</strong>{readOnly && <span>{t("历史记录")} · {t("只读")}</span>}</div><button className="drawer-close" onClick={onClose} aria-label={t("关闭 Agent 区")}><X size={20} /></button></header>
     <button className="agent-mini-map" onClick={onExpand} aria-label={t("展开 Agent 编排")}>
       <MiniGraph nodes={nodes} stage={stage} active={phase === currentPhase} statuses={statuses} />
       <span><CornersOut size={16} />{t("展开编排")}</span>
     </button>
     <AgentCallList phase={phase} nodes={nodes} statuses={statuses} onSelect={onOpenNode} compact />
-    <div className="agent-list-heading"><span>Agents</span><b>{nodes.filter((node) => node.kind === "agent").length}</b></div>
+    <div className="agent-list-heading"><span>Agents</span><b>{agents.length}</b></div>
     <div className="agent-list">
-      {nodes.filter((node) => node.kind === "agent").map((node, index) => {
+      {agents.map((node, index) => {
         const status = agentStatus(index, stage, statuses, node.id);
-        return <button className={`agent-result-button ${status}`} key={node.id} onClick={() => onOpenNode(node.id)} aria-busy={status === "running"}>
+        return <button ref={status === "running" ? runningAgentRef : undefined} className={`agent-result-button ${status}`} key={node.id} onClick={() => onOpenNode(node.id)} aria-busy={status === "running"}>
           <span className={`agent-status ${status}`}><Robot size={17} /></span>
           <div><strong>{node.name}</strong><small>{node.type}</small></div>
           <b>{status === "running" ? <span className="agent-running-copy">{t("执行中")}<i /><i /><i /></span> : t(statusLabel(status))}<CaretRight size={13} /></b>
