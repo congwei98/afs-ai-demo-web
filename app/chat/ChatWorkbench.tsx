@@ -346,7 +346,7 @@ function ChatWorkbenchContent() {
     if (!complaintInvestigationStarted) return complaintInvestigationNodes.filter((node) => node.id === "complaint-leading");
     return [
       ...complaintInvestigationNodes,
-      ...baseGraphs.retention.filter((node) => node.id === "retention" || (complaintPlanAgentsVisible && node.id !== "customer-care" && (complaintWarrantyRequested || node.id !== "warranty"))),
+      ...baseGraphs.retention.filter((node) => complaintPlanAgentsVisible && node.id !== "retention" && node.id !== "customer-care" && (complaintWarrantyRequested || node.id !== "warranty")),
       ...(complaintKnowledgeVisible ? [{ ...baseGraphs.retention.find((node) => node.id === "customer-care")!, id: "complaint-knowledge", name: "Complaint Knowledge Agent" }] : []),
     ];
   }, [complaintInvestigationStarted, complaintPlanAgentsVisible, complaintWarrantyRequested, complaintKnowledgeVisible]);
