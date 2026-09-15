@@ -56,6 +56,7 @@ type MessageRole = "assistant" | "user" | "system";
 type MessageCard = { label: string; value: string; meta?: string };
 type MessageNote = { label: string; text: string; tone?: "evidence" | "decision" | "next" };
 type PlanRow = { purpose: string; action: string; expected: string };
+type DataResultRow = { agent: string; data: string; result: string };
 type Message = {
   id: number;
   role: MessageRole;
@@ -66,6 +67,7 @@ type Message = {
   notes?: MessageNote[];
   card?: MessageCard;
   plan?: PlanRow[];
+  dataResults?: DataResultRow[];
   visible: number;
   streaming?: boolean;
   tone?: "risk" | "approval";
@@ -179,13 +181,13 @@ const complaintInvestigationMessages: Message[] = [
   {
     id: 1,
     role: "assistant",
-    lead: "识别到一个高风险投诉。",
-    body: "客户廖女士于 2026 年 4 月 1 日在珠海锦泰宝汇购买 BMW X5，提车当天回家路上出现发动机抖动。经销商初步判断为点火线圈故障并建议维修，但客户认为新车存在质量问题，不接受维修并明确要求退车。",
+    lead: "A high-risk complaint has been identified.",
+    body: "Ms. Liao purchased a BMW X5 from Zhuhai Jintai Baohui on April 1, 2026. The engine began vibrating on her drive home on delivery day. The dealer's initial diagnosis was an ignition-coil fault and they recommended a repair, but the customer considers this a new-vehicle quality issue, has declined the repair, and is requesting a vehicle return.",
     visible: 0,
     streaming: true,
     tone: "risk",
     showRecording: false,
-    actions: ["Start Compliant Investigation", "要求补充更多信息"],
+    actions: ["Start Complaint Investigation", "Request more information"],
   },
 ];
 
@@ -193,13 +195,36 @@ const callTranscript = "客户（廖女士）：我 4 月 1 日在珠海锦泰�
 
 const retentionPlan: PlanRow[] = [
   { purpose: "Verify the complaint facts", action: "Retrieve the April 2 repair work order", expected: "Validate the reported ignition fault" },
-  { purpose: "Confirm the repair arrangement", action: "Confirm the approved repair plan", expected: "Confirm the six-coil replacement scope" },
+  { purpose: "Confirm the repair plan", action: "Review the proposed repair plan", expected: "Approve or correct the six-coil replacement plan" },
   { purpose: "Confirm mobility support", action: "Check the dealer replacement vehicle", expected: "Confirm mobility coverage during repair" },
 ];
 
 const updatedRetentionPlan: PlanRow[] = [
   ...retentionPlan,
   { purpose: "Verify new-vehicle status", action: "Retrieve FRD start date and mileage", expected: "Confirm the vehicle status evidence" },
+];
+
+const complaintDataResults: DataResultRow[] = [
+  {
+    agent: "Repair History Data Agent",
+    data: "Repair record",
+    result: "An April 2, 2026 dealer work order documents a cylinder-two ignition-coil fault, matching the customer's report of engine vibration on delivery day.",
+  },
+  {
+    agent: "Technical Service Data Agent",
+    data: "Repair plan",
+    result: "Replace all six ignition coils, clear the stored fault codes, and complete a road test before releasing the vehicle.",
+  },
+  {
+    agent: "Mobility Data Agent",
+    data: "Replacement vehicle",
+    result: "A BMW 5 Series replacement vehicle is available for the coming week and can cover the full repair period.",
+  },
+  {
+    agent: "Warranty Data Agent",
+    data: "FRD and mileage",
+    result: "The FRD warranty start date is April 3, 2026 and the recorded mileage is 91 km, supporting the vehicle's new-vehicle status.",
+  },
 ];
 
 const pendingTaskItems = [
@@ -309,6 +334,7 @@ function ChatWorkbenchContent() {
   const complaintTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const complaintNextId = useRef(2);
   const complaintInitialStarted = useRef(false);
+  const complaintKnowledgeStarted = useRef(false);
   const messageEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const initialStarted = useRef(false);
@@ -369,6 +395,7 @@ function ChatWorkbenchContent() {
     clearComplaintTimers();
     if (repairQueryTimer.current) clearTimeout(repairQueryTimer.current);
     initialStarted.current = false;
+    complaintInitialStarted.current = false;
   }, []);
 
   const startComplaintInvestigationTask = () => {
@@ -379,6 +406,7 @@ function ChatWorkbenchContent() {
     setComplaintConfirmationsReady(false);
     setComplaintApprovals({ technical: false, mobility: false });
     setComplaintKnowledgeVisible(false);
+    complaintKnowledgeStarted.current = false;
     setComplaintInput("");
     complaintNextId.current = 2;
     setComplaintAgentStates({ "complaint-leading": "running" });
@@ -397,9 +425,9 @@ function ChatWorkbenchContent() {
     complaintTimers.current.push(setTimeout(streamResponse, 180));
   };
 
-  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; actions?: string[]; onDone?: () => void }) => {
+  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; dataResults?: DataResultRow[]; actions?: string[]; onDone?: () => void }) => {
     const id = complaintNextId.current++;
-    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, actions: options?.actions, visible: 0, streaming: true }]);
+    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, dataResults: options?.dataResults, actions: options?.actions, visible: 0, streaming: true }]);
     let visible = 0;
     const tick = () => {
       visible += 1;
@@ -740,19 +768,19 @@ function ChatWorkbenchContent() {
   const activeApprovalDone = complaintApprovalTask ? complaintApprovals[complaintApprovalTask] : activeApproval ? approvals[activeApproval] : false;
   const approveActiveTask = () => {
     if (complaintApprovalTask) {
-      setComplaintApprovals((current) => {
-        const next = { ...current, [complaintApprovalTask]: true };
-        if (next.technical && next.mobility) {
-          setComplaintKnowledgeVisible(true);
-          setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
-          streamComplaintAssistant("Complaint Knowledge Agent has consolidated the approved repair plan, mobility support, and comparable-case evidence.\n\nThe dealer and customer have aligned on a compensation package of a one-year extended warranty, one engine service, two oil services, and a replacement vehicle. The total value is RMB 8,300.\n\nComparable BMW X5 ignition and spark-plug repair complaints were settled between RMB 7,000 and RMB 9,500. This proposed package is within the historical range, so I recommend approving it.", {
-            actions: ["Approve proposal", "Update proposal"],
-            onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
-          });
-        }
-        return next;
-      });
+      const next = { ...complaintApprovals, [complaintApprovalTask]: true };
+      setComplaintApprovals(next);
       setComplaintAgentStates((current) => ({ ...current, [complaintApprovalTask]: "done" }));
+      if (next.technical && next.mobility && !complaintKnowledgeStarted.current) {
+        complaintKnowledgeStarted.current = true;
+        setTaskView("complaint-investigation");
+        setComplaintKnowledgeVisible(true);
+        setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
+        streamComplaintAssistant("Complaint Knowledge Agent has reviewed the approved repair plan, confirmed mobility support, and comparable compensation cases.\n\nThe dealer and customer have aligned on a one-year extended warranty, one engine service, two oil services, and a replacement vehicle, with a total value of RMB 8,300.\n\nHistorical complaints involving BMW X5 vehicles with the same ignition-coil and spark-plug repair profile were compensated between RMB 7,000 and RMB 9,500. The proposed package is within that evidence-based range, so I recommend approval.", {
+          actions: ["Approve proposal", "Update proposal"],
+          onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
+        });
+      }
       return;
     }
     if (activeApproval === "repair-history" || activeApproval === "technical" || activeApproval === "mobility" || activeApproval === "warranty") approveAgentResult(activeApproval);
@@ -762,13 +790,13 @@ function ChatWorkbenchContent() {
 
   const handleComplaintAction = (action: string) => {
     const userMessage: Message = { id: complaintNextId.current++, role: "user", body: action, visible: action.length };
-    if (action === "Start Compliant Investigation") {
+    if (action === "Start Complaint Investigation") {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintInvestigationStarted(true);
       setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "running" });
-      streamComplaintAssistant("我推荐按下面的顺序执行。\n\n客户在购车当日就发现故障，因此先核实购车日附近的维修工单，确认客户提供的故障信息与经销商记录是否一致。随后查询已登记的维修方案，明确后续修复安排。\n\n维修期间的出行安排也会影响客户是否愿意继续沟通，因此我会查询经销商是否有可用代步车。", {
+      streamComplaintAssistant("I recommend running the investigation in the sequence below.\n\nBecause the fault appeared on delivery day, the first step is to verify the dealer work order against the customer's account. I will then retrieve the proposed repair plan so Technical Service can confirm that it fully addresses the ignition fault.\n\nI will also check replacement-vehicle availability because continuous mobility support may affect the customer's willingness to continue the resolution discussion.", {
         plan: retentionPlan,
-        actions: ["按建议开始"],
+        actions: ["Start investigation"],
         onDone: () => {
           setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "done", retention: "done", "repair-history": "waiting", technical: "waiting", mobility: "waiting" });
           setComplaintPlanAgentsVisible(true);
@@ -776,30 +804,33 @@ function ChatWorkbenchContent() {
       });
       return;
     }
-    if (action === "按建议开始") {
+    if (action === "Start investigation") {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
-      streamComplaintAssistant("Repair History Data Agent result: an April 2 dealer work order records diagnosis of a cylinder-two ignition-coil fault, matching the customer's reported engine vibration.");
-      streamComplaintAssistant("Technical Service Data Agent result: the approved repair arrangement is replacement of all six ignition coils, followed by a road test and fault-code clearance.");
-      streamComplaintAssistant("Mobility Data Agent result: a BMW 5 Series replacement vehicle is available for the coming week, covering the customer's mobility needs during repair.");
-      streamComplaintAssistant("Warranty Data Agent result: FRD warranty start date is April 3, 2026 and recorded mileage is 91 km, confirming new-vehicle status.", { onDone: () => { setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", warranty: "done" })); setComplaintConfirmationsReady(true); } });
+      streamComplaintAssistant("All requested data checks are complete. The consolidated results are summarized below for departmental confirmation.", {
+        dataResults: complaintDataResults,
+        onDone: () => {
+          setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", warranty: "done" }));
+          setComplaintConfirmationsReady(true);
+        },
+      });
       return;
     }
     if (action === "Approve proposal") {
-      setComplaintMessages((current) => [...current, userMessage]);
+      setComplaintMessages((current) => [...current.map((message) => message.actions?.includes("Approve proposal") ? { ...message, actions: undefined } : message), userMessage]);
       streamComplaintAssistant("Complaint proposal approval is complete. The agreed compensation package has been recorded and the complaint resolution is ready for closure.", {});
       return;
     }
     if (action === "Update proposal") {
-      setComplaintMessages((current) => [...current, userMessage]);
-      streamComplaintAssistant("请在下方说明需要调整的补偿项目或金额，我会基于历史案例更新方案。", {});
+      setComplaintMessages((current) => [...current.map((message) => message.actions?.includes("Update proposal") ? { ...message, actions: undefined } : message), userMessage]);
+      streamComplaintAssistant("Describe the compensation item or amount that should be revised, and I will update the proposal against the comparable-case evidence.", {});
       return;
     }
     setComplaintMessages((current) => [...current, userMessage, {
       id: complaintNextId.current++,
       role: "assistant",
-      body: "请补充经销商完整检测报告、维修工单、车辆当前里程，以及客户是否已提交书面退车申请。收到后，我会更新投诉风险判断与调查建议。",
-      visible: 62,
+      body: "Please provide the dealer's complete diagnostic report, the repair work order, the vehicle's current mileage, and whether the customer has submitted a written return request. I will then update the complaint risk assessment and investigation recommendation.",
+      visible: 232,
     }]);
   };
 
@@ -810,9 +841,9 @@ function ChatWorkbenchContent() {
     setComplaintInput("");
     setComplaintMessages((current) => [...current, { id: complaintNextId.current++, role: "user", body: value, visible: value.length }]);
     setComplaintAgentStates((current) => ({ ...current, retention: "running", warranty: "waiting" }));
-    streamComplaintAssistant(`我已收到你的补充：“${value}”。\n\n我已将 FRD 保修开始日和当前里程加入待执行计划。它们会与购车日附近的维修工单、维修方案和代步车可用性一并核对；目前尚未发起数据查询。下面是更新后的计划，请确认后开始执行。`, {
+    streamComplaintAssistant(`I have added your information: “${value}”.\n\nThe FRD warranty start date and current mileage are now included in the investigation plan. They will be checked together with the delivery-period repair work order, the proposed repair plan, and replacement-vehicle availability. No data query has started yet. Review the updated plan below, then start the investigation.`, {
       plan: updatedRetentionPlan,
-      actions: ["按建议开始"],
+      actions: ["Start investigation"],
       onDone: () => {
         setComplaintWarrantyRequested(true);
         setComplaintPlanAgentsVisible(true);
@@ -908,7 +939,7 @@ function ChatWorkbenchContent() {
               <button type="submit" disabled={!canSend || !input.trim()} aria-label={t("发送指令")}><PaperPlaneTilt size={20} weight="fill" /></button>
             </div>
             </form>
-          </> : taskView === "complaint-investigation" ? <ComplaintInvestigationTask messages={complaintMessages} onAction={handleComplaintAction} input={complaintInput} onInput={setComplaintInput} onSubmit={submitComplaintInput} investigationStarted={complaintInvestigationStarted} customerOpen={customerOpen} onToggleCustomer={() => setCustomerOpen((current) => !current)} profileReady={profileReady} /> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView("main")} />}
+          </> : taskView === "complaint-investigation" ? <ComplaintInvestigationTask messages={complaintMessages} onAction={handleComplaintAction} input={complaintInput} onInput={setComplaintInput} onSubmit={submitComplaintInput} investigationStarted={complaintInvestigationStarted} customerOpen={customerOpen} onToggleCustomer={() => setCustomerOpen((current) => !current)} profileReady={profileReady} /> : taskView === "repair-query" ? <RepairQueryTask input={repairQueryInput} onInput={setRepairQueryInput} request={repairQueryRequest} vehicle={repairQueryVehicle} status={repairQueryStatus} needsDetail={repairQueryNeedsDetail} onSubmit={submitRepairQuery} /> : <ApprovalTask key={taskView} type={taskView} approved={activeApprovalDone} onApprove={approveActiveTask} onBack={() => setTaskView(complaintConfirmationsReady ? "complaint-investigation" : "main")} />}
         </section>
 
         <AgentWorkspace
@@ -970,25 +1001,29 @@ function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, 
   if (stage === "waiting_investigation_approvals" && !approvals.technical) approvalTasks.push({ id: "technical", title: "Technical Service Data Agent 请求业务审批｜4/7 维修方案" });
   if (stage === "waiting_investigation_approvals" && !approvals.mobility) approvalTasks.push({ id: "mobility", title: "Mobility Data Agent 请求业务审批｜代步车可用性" });
   if (stage === "waiting_investigation_approvals" && !approvals.warranty) approvalTasks.push({ id: "warranty", title: "Warranty Data Agent 请求业务审批｜FRD 与里程" });
-  if (complaintConfirmationsReady && !complaintApprovals.technical) approvalTasks.push({ id: "technical", title: "Technical Service 确认维修方案｜廖女士" });
-  if (complaintConfirmationsReady && !complaintApprovals.mobility) approvalTasks.push({ id: "mobility", title: "Mobility Team 确认代步车｜廖女士" });
+  const complaintApprovalTasks = [
+    complaintConfirmationsReady && !complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service · Confirm repair plan · Ms. Liao" } : null,
+    complaintConfirmationsReady && !complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Confirm replacement vehicle · Ms. Liao" } : null,
+  ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const completedApprovalTasks = [
     approvals["repair-history"] ? { id: "repair-history" as TaskView, title: "Repair History 已确认｜维修记录" } : null,
     approvals.technical ? { id: "technical" as TaskView, title: "Technical Service 已确认｜维修方案" } : null,
     approvals.mobility ? { id: "mobility" as TaskView, title: "Mobility 已确认｜代步车安排" } : null,
     approvals.warranty ? { id: "warranty" as TaskView, title: "Warranty 已确认｜FRD 与里程" } : null,
-    complaintConfirmationsReady && complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service 已确认｜维修方案" } : null,
-    complaintConfirmationsReady && complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team 已确认｜代步车安排" } : null,
+  ].filter((task): task is { id: TaskView; title: string } => task !== null);
+  const completedComplaintApprovalTasks = [
+    complaintConfirmationsReady && complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service · Repair plan confirmed" } : null,
+    complaintConfirmationsReady && complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Replacement vehicle confirmed" } : null,
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const visiblePending = showAll ? [...createdTasks, ...pendingTaskItems] : [...createdTasks, ...pendingTaskItems].slice(0, 4);
   const visibleCompleted = showAll ? completedTaskItems : completedTaskItems.slice(0, 2);
-  const totalTasks = 2 + pendingTaskItems.length + completedTaskItems.length + approvalTasks.length + completedApprovalTasks.length + createdTasks.length;
+  const totalTasks = 2 + pendingTaskItems.length + completedTaskItems.length + approvalTasks.length + complaintApprovalTasks.length + completedApprovalTasks.length + completedComplaintApprovalTasks.length + createdTasks.length;
   const createTask = () => {
     setCreatedTasks((current) => current.length ? current : [{ id: "repair-query", title: "新建任务", status: "待处理" }]);
     onCreateTask();
   };
   const demoTask = <button className={`task-list-item primary risk-task ${taskView === "main" ? "active" : ""}`} onClick={() => onSelectTask("main")}><WarningCircle size={18} weight="fill" /><span title={t(currentTitle)}>{t(currentTitle)}</span><b title={t(currentStatus)}>{compactStatus(currentStatus)}</b></button>;
-  const investigationTask = <button className={`task-list-item primary risk-task ${taskView === "complaint-investigation" ? "active" : ""}`} onClick={() => onSelectTask("complaint-investigation")}><WarningCircle size={18} weight="fill" /><span title={t("高风险投诉调查｜廖女士")}>{t("高风险投诉调查｜廖女士")}</span><b title={t("待处理")}>{compactStatus("待处理")}</b></button>;
+  const investigationTask = <button className={`task-list-item primary risk-task ${taskView === "complaint-investigation" ? "active" : ""}`} onClick={() => onSelectTask("complaint-investigation")}><WarningCircle size={18} weight="fill" /><span title="High-risk complaint investigation · Ms. Liao">High-risk complaint investigation · Ms. Liao</span><b title="In progress">In progress</b></button>;
   return <aside id="workbench-tasks" className={`task-sidebar ${drawer ? "drawer-open" : ""}`} aria-label={t("任务列表")}>
     <header><div><span>{t("任务中心")}</span><strong>{totalTasks}{t(" 个任务")}</strong></div><button className="drawer-close" onClick={onClose} aria-label={t("关闭任务列表")}><X size={20} /></button></header>
     <button className="new-task-button" onClick={createTask}><Plus size={17} />{t("新建任务")}</button>
@@ -996,10 +1031,12 @@ function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, 
     <div className="task-section-label">{t("待处理")}</div>
     {investigationTask}
     {!isStarted && demoTask}
+    {complaintApprovalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={`complaint-${task.id}`} onClick={() => onSelectTask(task.id)}><span title={task.title}>{task.title}</span><b title="Confirmation required">Confirm</b></button>)}
     {approvalTasks.map((task) => <button className={`task-list-item approval ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("需审批")}>{compactStatus("需审批")}</b></button>)}
     {visiblePending.map((task) => <button className={`task-list-item ${task.id === "repair-query" && taskView === "repair-query" ? "active" : ""}`} key={task.id} onClick={() => task.id === "repair-query" && onSelectTask("repair-query")}><span title={task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}>{task.id === "repair-query" && repairQueryRequest ? `${t("车辆维修记录查询")} | ${repairQueryVehicle}` : t(task.title)}</span><b>{compactStatus(task.id === "repair-query" ? repairQueryStatus === "done" ? "已完成" : repairQueryStatus === "running" ? "处理中" : task.status : task.status)}</b></button>)}
     <div className="task-section-label">{t("已完成")}</div>
     {isFinished && demoTask}
+    {completedComplaintApprovalTasks.map((task) => <button className={`task-list-item muted ${taskView === task.id ? "active" : ""}`} key={`complaint-complete-${task.id}`} onClick={() => onSelectTask(task.id)}><span title={task.title}>{task.title}</span><b title="Confirmed">Done</b></button>)}
     {completedApprovalTasks.map((task) => <button className={`task-list-item muted ${taskView === task.id ? "active" : ""}`} key={task.id} onClick={() => onSelectTask(task.id)}><span title={t(task.title)}>{t(task.title)}</span><b title={t("已审批")}>{compactStatus("已审批")}</b></button>)}
     {visibleCompleted.map((task) => <button className="task-list-item muted" key={task.id}><span title={t(task.title)}>{t(task.title)}</span><b title={t(task.status)}>{compactStatus(task.status)}</b></button>)}
     <button className="show-all-tasks" onClick={() => setShowAll((current) => !current)}>{showAll ? t("收起任务列表") : `${t("展开完整列表")} (${totalTasks})`}<CaretDown size={15} /></button>
@@ -1055,16 +1092,16 @@ function RepairHistoryTable({ records }: { records: RepairRecord[] }) {
 }
 
 function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTaskView; approved: boolean; onApprove: () => void; onBack: () => void }) {
-  const { t } = useLanguage();
   const approvalContent: Record<ApprovalTaskView, { role: string; reason: string; result: string }> = {
-    "repair-history": { role: "Repair History", reason: "客户在购车当日提出发动机抖动投诉，需要查询购车日附近的维修记录，核实客户描述是否与经销商记录一致。", result: "4 月 4 日有进店记录，检测发现二缸点火线圈工作不良，导致缺火抖动。" },
-    technical: { role: "Technical Service", reason: "Confirm that the approved repair arrangement addresses the documented ignition-coil fault.", result: "Replace all six ignition coils, clear fault codes, and complete a road test." },
-    mobility: { role: "Mobility Team", reason: "Confirm mobility support while the approved repair arrangement is completed.", result: "A BMW 5 Series replacement vehicle is available for the coming week." },
-    warranty: { role: "Warranty", reason: "该查询由业务人员补充，用于核实车辆的新车状态，并为当前案件提供车辆状态依据。", result: "FRD 保修开始日为 2026 年 4 月 3 日，当前里程为 91 km。" },
-    legal: { role: "Legal", reason: "等待业务部门确认。", result: "本次核验结果已返回。" },
-    parts: { role: "Parts", reason: "等待业务部门确认。", result: "本次核验结果已返回。" },
+    "repair-history": { role: "Repair History", reason: "Verify that the customer's delivery-day engine-vibration account matches the dealer record.", result: "An April 2, 2026 dealer work order documents a cylinder-two ignition-coil fault that caused misfiring and vibration." },
+    technical: { role: "Technical Service", reason: "Confirm that the proposed repair plan fully addresses the documented ignition-coil fault.", result: "Replace all six ignition coils, clear the stored fault codes, and complete a road test before release." },
+    mobility: { role: "Mobility Team", reason: "Confirm replacement-vehicle coverage while the approved repair plan is completed.", result: "A BMW 5 Series replacement vehicle is available for the coming week and can cover the repair period." },
+    warranty: { role: "Warranty", reason: "Confirm the vehicle's new-vehicle status using the supplemental FRD and mileage evidence.", result: "The FRD warranty start date is April 3, 2026 and the recorded mileage is 91 km." },
+    legal: { role: "Legal", reason: "Confirm the returned verification result for the complaint case.", result: "The requested legal verification is complete." },
+    parts: { role: "Parts", reason: "Confirm the returned verification result for the complaint case.", result: "The requested parts verification is complete." },
   };
   const { role, reason, result } = approvalContent[type];
+  const confirmationSubject = type === "technical" ? "repair plan" : type === "mobility" ? "replacement vehicle" : `${role.toLowerCase()} information`;
   const [reply, setReply] = useState("");
   const [submittedReply, setSubmittedReply] = useState("");
   const approvalFileInput = useRef<HTMLInputElement>(null);
@@ -1085,35 +1122,35 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
       <button onClick={onBack}>Return to investigation</button>
       <div><span>{role.toUpperCase()} CONFIRMATION</span><h2 id="approval-task-title">High-risk complaint · {role} confirmation</h2></div>
     </header>
-    <div className="approval-customer"><UserCircle size={22} /><strong>{t("廖女士 · BMW X5")}</strong><span>VIN LBV41EP0…J47787</span><span>91 km</span></div>
+    <div className="approval-customer"><UserCircle size={22} /><strong>Ms. Liao · BMW X5</strong><span>VIN LBV41EP0…J47787</span><span>91 km</span></div>
     <div className="approval-conversation">
     <article className="approval-recommendation chat-style">
       <div className="approval-ai-icon"><Robot size={48} /></div>
       <div>
-        <div className="approval-basic-table"><table><tbody><tr><th>{t("客户")}</th><td>{t("廖女士")}</td><th>{t("车型")}</th><td>BMW X5</td></tr><tr><th>VIN</th><td>LBV41EP0…J47787</td><th>{t("当前里程")}</th><td>91 km</td></tr></tbody></table></div>
-        <p><strong>Complaint background:</strong> Ms. Liao's BMW X5 developed engine vibration on delivery day; the customer declined a repair and requested a return.</p>
+        <div className="approval-basic-table"><table><tbody><tr><th>Customer</th><td>Ms. Liao</td><th>Model</th><td>BMW X5</td></tr><tr><th>VIN</th><td>LBV41EP0…J47787</td><th>Current mileage</th><td>91 km</td></tr></tbody></table></div>
+        <p><strong>Complaint background:</strong> Ms. Liao’s BMW X5 developed engine vibration on delivery day; the customer declined a repair and requested a return.</p>
         <p><strong>Information to confirm:</strong> {result}</p>
         <p><strong>Confirmation purpose:</strong> {reason}</p>
       </div>
     </article>
-    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} confirmation`}><button onClick={() => approveWith(`I confirm the ${role} information.`)}>Confirm information</button><button onClick={() => setReply("Please correct the following information:")}>Correct information</button></nav>}
-    {submittedReply && <article className="approval-user-reply"><UserCircle size={22} /><p>{t(submittedReply)}</p></article>}
-    {approved && <article className="approval-confirmed"><Robot size={44} /><p>{t("收到，我已经记录你的审批意见。请继续完成左侧其余 Agent 结果的审批。")}</p></article>}
+    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} confirmation`}><button onClick={() => approveWith(`I confirm the ${confirmationSubject}.`)}>Confirm {confirmationSubject}</button><button onClick={() => setReply("Please correct the following information:")}>Correct information</button></nav>}
+    {submittedReply && <article className="approval-user-reply"><UserCircle size={22} /><p>{submittedReply}</p></article>}
+    {approved && <article className="approval-confirmed"><Robot size={44} /><p>Confirmation recorded. Return to the complaint investigation or complete the remaining confirmation task.</p></article>}
     </div>
     <form className="approval-chat-composer" onSubmit={submitApproval}>
-      <label className="sr-only" htmlFor={`approval-reply-${type}`}>{t("审批意见")}</label>
-      <div><button className="file-upload-button" type="button" onClick={() => approvalFileInput.current?.click()} disabled={approved} aria-label={t("上传审批附件")}><Paperclip size={20} /></button><input ref={approvalFileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) setReply(`${t("已附加")} ${file.name}`); event.target.value = ""; }} /><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder="Do anything" /><button type="submit" disabled={approved || !reply.trim()} aria-label={`${t("发送")} ${role} ${t("审批意见")}`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
+      <label className="sr-only" htmlFor={`approval-reply-${type}`}>Confirmation note</label>
+      <div><button className="file-upload-button" type="button" onClick={() => approvalFileInput.current?.click()} disabled={approved} aria-label="Upload confirmation attachment"><Paperclip size={20} /></button><input ref={approvalFileInput} className="sr-only" type="file" tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; if (file) setReply(`Attached: ${file.name}`); event.target.value = ""; }} /><input id={`approval-reply-${type}`} value={reply} onChange={(event) => setReply(event.target.value)} disabled={approved} placeholder="Do anything" /><button type="submit" disabled={approved || !reply.trim()} aria-label={`Send ${role} confirmation note`}><PaperPlaneTilt size={19} weight="fill" /></button></div>
     </form>
   </section>;
 }
 
 function ProcessTracker({ phase, stage, taskView, approvalCompleted, progress, history, graphView, onViewHistory }: { phase: Phase; stage: Stage; taskView: TaskView; approvalCompleted: boolean; progress: number; history: Phase[]; graphView: Phase | null; onViewHistory: (phase: Phase | null) => void }) {
   const { t } = useLanguage();
-  if (taskView !== "main") {
+  if (taskView !== "main" && taskView !== "complaint-investigation" && taskView !== "repair-query") {
     const role = taskView === "repair-history" ? "Repair History" : taskView === "technical" ? "Technical Service" : taskView === "mobility" ? "Mobility" : taskView === "warranty" ? "Warranty" : taskView === "legal" ? "Legal" : "Parts";
-    return <section className="process-tracker approval-process" aria-label={t("审批流程进度")}>
-      <header><div><span>{t("当前审批任务")}</span><strong>{t("高风险投诉案件")} · {t("审批")} {role}</strong></div></header>
-      <ol><li className="done"><span><Check size={15} weight="bold" /></span><b>{t("高风险投诉案件")}</b><i /></li><li className={approvalCompleted ? "done" : "active waiting"}><span>{approvalCompleted ? <Check size={15} weight="bold" /> : 2}</span><b>{approvalCompleted ? `${role} ${t("已确认")}` : `${t("审批")} ${role}`}</b></li></ol>
+    return <section className="process-tracker approval-process" aria-label="Confirmation progress">
+      <header><div><span>Current confirmation task</span><strong>High-risk complaint · {role} confirmation</strong></div></header>
+      <ol><li className="done"><span><Check size={15} weight="bold" /></span><b>High-risk complaint</b><i /></li><li className={approvalCompleted ? "done" : "active waiting"}><span>{approvalCompleted ? <Check size={15} weight="bold" /> : 2}</span><b>{approvalCompleted ? `${role} confirmed` : `Confirm ${role}`}</b></li></ol>
     </section>;
   }
   const definition = processDefinitions[phase];
@@ -1165,6 +1202,7 @@ function ChatMessage({ message, onAction, actionsDisabled }: { message: Message;
       {message.lead && <strong className="message-lead">{t(message.lead)}</strong>}
       <p>{visibleBody}{message.streaming && <i className="stream-cursor" />}</p>
       {!message.streaming && message.plan && <div className="ai-plan-table"><table><thead><tr><th>{t("目标")}</th><th>{t("执行动作")}</th><th>{t("预期产出")}</th></tr></thead><tbody>{message.plan.map((row) => <tr key={row.purpose}><td>{t(row.purpose)}</td><td>{t(row.action)}</td><td>{t(row.expected)}</td></tr>)}</tbody></table></div>}
+      {!message.streaming && message.dataResults && <div className="ai-plan-table"><table><thead><tr><th>Agent</th><th>Data checked</th><th>Result</th></tr></thead><tbody>{message.dataResults.map((row) => <tr key={row.agent}><td>{row.agent}</td><td>{row.data}</td><td>{row.result}</td></tr>)}</tbody></table></div>}
       {!message.streaming && message.bullets && <ul>{message.bullets.map((item) => <li key={item}>{t(item)}</li>)}</ul>}
       {!message.streaming && message.notes && <div className="ai-notes">{message.notes.map((note) => <p key={`${note.label}-${note.text}`}>{t(note.text)}</p>)}</div>}
       {!message.streaming && message.card && <p className="ai-result">{t(message.card.label)}: {t(message.card.value)}{message.card.meta && ` (${t(message.card.meta)})`}</p>}

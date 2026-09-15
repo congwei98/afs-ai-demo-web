@@ -5,10 +5,10 @@ import test from "node:test";
 const workbench = readFileSync(new URL("../app/chat/ChatWorkbench.tsx", import.meta.url), "utf8");
 
 test("complaint investigation task keeps the requested first-turn experience", () => {
-  assert.match(workbench, /lead: "识别到一个高风险投诉。"/);
+  assert.match(workbench, /lead: "A high-risk complaint has been identified\."/);
   assert.match(workbench, /showRecording: false/);
   assert.match(workbench, /streaming: true/);
-  assert.match(workbench, /actions: \["Start Compliant Investigation", "要求补充更多信息"\]/);
+  assert.match(workbench, /actions: \["Start Complaint Investigation", "Request more information"\]/);
   const taskMessages = workbench.slice(workbench.indexOf("const complaintInvestigationMessages"), workbench.indexOf("const callTranscript"));
   assert.doesNotMatch(taskMessages, /role: "system"/);
 });
@@ -23,27 +23,41 @@ test("complaint task is the refreshed default and supports the same FRD plan upd
   assert.match(workbench, /startComplaintInvestigationTask\(\);/);
   assert.match(workbench, /plan: retentionPlan/);
   assert.match(workbench, /plan: updatedRetentionPlan/);
-  assert.match(workbench, /FRD 保修开始日和当前里程加入待执行计划/);
+  assert.match(workbench, /FRD warranty start date and current mileage are now included/);
   assert.match(workbench, /complaint-investigation-command/);
   assert.match(workbench, /complaintPlanAgentsVisible/);
 });
 
 test("completed complaint data checks create Technical and Mobility confirmation tasks", () => {
   assert.match(workbench, /setComplaintConfirmationsReady\(true\)/);
-  assert.match(workbench, /Technical Service 确认维修方案｜廖女士/);
-  assert.match(workbench, /Mobility Team 确认代步车｜廖女士/);
-  assert.match(workbench, /客户投诉背景/);
-  assert.match(workbench, /需要确认的信息/);
-  assert.match(workbench, /确认信息/);
-  assert.match(workbench, /更正信息/);
+  assert.match(workbench, /Technical Service · Confirm repair plan · Ms\. Liao/);
+  assert.match(workbench, /Mobility Team · Confirm replacement vehicle · Ms\. Liao/);
+  assert.match(workbench, /Complaint background:/);
+  assert.match(workbench, /Information to confirm:/);
+  assert.match(workbench, /Confirm \{confirmationSubject\}/);
+  assert.match(workbench, /Correct information/);
 });
 
 test("approved department tasks return a Complaint Knowledge Agent recommendation", () => {
   assert.match(workbench, /Complaint Knowledge Agent/);
-  assert.match(workbench, /整体费用为 8300 RMB/);
-  assert.match(workbench, /7000 到 9500 RMB/);
-  assert.match(workbench, /actions: \["同意方案", "更新方案"\]/);
+  assert.match(workbench, /total value of RMB 8,300/);
+  assert.match(workbench, /between RMB 7,000 and RMB 9,500/);
+  assert.match(workbench, /actions: \["Approve proposal", "Update proposal"\]/);
+  assert.match(workbench, /complaintKnowledgeStarted\.current/);
   assert.match(workbench, /placeholder="Do anything"/);
+});
+
+test("all complaint data agent results render in one table message", () => {
+  assert.match(workbench, /const complaintDataResults: DataResultRow\[\]/);
+  assert.match(workbench, /dataResults: complaintDataResults/);
+  assert.match(workbench, /<th>Agent<\/th><th>Data checked<\/th><th>Result<\/th>/);
+  assert.doesNotMatch(workbench, /Repair History Data Agent result:/);
+  assert.match(workbench, /data: "Repair plan"/);
+});
+
+test("proposal approval ends with a confirmation-only message", () => {
+  assert.match(workbench, /Complaint proposal approval is complete\./);
+  assert.match(workbench, /message\.actions\?\.includes\("Approve proposal"\)/);
 });
 
 test("routers are presented as leading agents with an investigation process agent", () => {
