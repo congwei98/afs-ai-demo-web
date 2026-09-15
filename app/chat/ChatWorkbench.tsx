@@ -388,7 +388,7 @@ function ChatWorkbenchContent() {
       visible += 1;
       setComplaintMessages((current) => current.map((message) => ({ ...message, visible })));
       if (visible < complaintInvestigationMessages[0].body.length) {
-        complaintTimers.current.push(setTimeout(streamResponse, 24));
+        complaintTimers.current.push(setTimeout(streamResponse, 12));
         return;
       }
       setComplaintMessages((current) => current.map((message) => ({ ...message, visible: complaintInvestigationMessages[0].body.length, streaming: false })));
@@ -405,7 +405,7 @@ function ChatWorkbenchContent() {
       visible += 1;
       setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, visible } : message));
       if (visible < body.length) {
-        complaintTimers.current.push(setTimeout(tick, 30));
+        complaintTimers.current.push(setTimeout(tick, 15));
         return;
       }
       setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, visible: body.length, streaming: false } : message));
@@ -779,20 +779,18 @@ function ChatWorkbenchContent() {
     if (action === "按建议开始") {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
-      streamComplaintAssistant("The Data Agents have completed their checks. Repair History found an April 2 repair work order documenting a cylinder-two ignition-coil fault. Technical Service recommends replacing all six ignition coils. Mobility confirmed a BMW 5 Series replacement vehicle for the coming week. FRD shows a warranty start date of April 3, 2026 and current mileage of 91 km, confirming new-vehicle status.\n\nTechnical Service and Mobility Team confirmation tasks are now available in the left panel.", {
-        onDone: () => {
-          setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", ...(complaintWarrantyRequested ? { warranty: "done" } : {}) }));
-          setComplaintConfirmationsReady(true);
-        },
-      });
+      streamComplaintAssistant("Repair History Data Agent result: an April 2 dealer work order records diagnosis of a cylinder-two ignition-coil fault, matching the customer's reported engine vibration.");
+      streamComplaintAssistant("Technical Service Data Agent result: the approved repair arrangement is replacement of all six ignition coils, followed by a road test and fault-code clearance.");
+      streamComplaintAssistant("Mobility Data Agent result: a BMW 5 Series replacement vehicle is available for the coming week, covering the customer's mobility needs during repair.");
+      streamComplaintAssistant("Warranty Data Agent result: FRD warranty start date is April 3, 2026 and recorded mileage is 91 km, confirming new-vehicle status.", { onDone: () => { setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", warranty: "done" })); setComplaintConfirmationsReady(true); } });
       return;
     }
-    if (action === "同意方案") {
+    if (action === "Approve proposal") {
       setComplaintMessages((current) => [...current, userMessage]);
-      streamComplaintAssistant("方案已同意。我会将补偿方案提交审批，并保留经销商与客户已达成一致的记录。", {});
+      streamComplaintAssistant("Complaint proposal approval is complete. The agreed compensation package has been recorded and the complaint resolution is ready for closure.", {});
       return;
     }
-    if (action === "更新方案") {
+    if (action === "Update proposal") {
       setComplaintMessages((current) => [...current, userMessage]);
       streamComplaintAssistant("请在下方说明需要调整的补偿项目或金额，我会基于历史案例更新方案。", {});
       return;
@@ -1060,8 +1058,8 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
   const { t } = useLanguage();
   const approvalContent: Record<ApprovalTaskView, { role: string; reason: string; result: string }> = {
     "repair-history": { role: "Repair History", reason: "客户在购车当日提出发动机抖动投诉，需要查询购车日附近的维修记录，核实客户描述是否与经销商记录一致。", result: "4 月 4 日有进店记录，检测发现二缸点火线圈工作不良，导致缺火抖动。" },
-    technical: { role: "Technical Service", reason: "客户挽留方案需要以已登记的修复安排为基础，因此查询当前技术维修方案。", result: "4 月 7 日技术反馈为更换所有点火线圈（6 个）。" },
-    mobility: { role: "Mobility", reason: "维修期间的出行支持会影响客户是否接受挽留方案，因此查询经销商的代步车可用性。", result: "未来一周有一辆 5 系代步车可以使用。" },
+    technical: { role: "Technical Service", reason: "Confirm that the approved repair arrangement addresses the documented ignition-coil fault.", result: "Replace all six ignition coils, clear fault codes, and complete a road test." },
+    mobility: { role: "Mobility Team", reason: "Confirm mobility support while the approved repair arrangement is completed.", result: "A BMW 5 Series replacement vehicle is available for the coming week." },
     warranty: { role: "Warranty", reason: "该查询由业务人员补充，用于核实车辆的新车状态，并为当前案件提供车辆状态依据。", result: "FRD 保修开始日为 2026 年 4 月 3 日，当前里程为 91 km。" },
     legal: { role: "Legal", reason: "等待业务部门确认。", result: "本次核验结果已返回。" },
     parts: { role: "Parts", reason: "等待业务部门确认。", result: "本次核验结果已返回。" },
@@ -1084,8 +1082,8 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
   };
   return <section className="approval-task" aria-labelledby="approval-task-title">
     <header>
-      <button onClick={onBack}>{t("返回主任务")}</button>
-      <div><span>{role.toUpperCase()} APPROVAL</span><h2 id="approval-task-title">{t("高风险投诉案件")} · {t("审批")} {role}</h2></div>
+      <button onClick={onBack}>Return to investigation</button>
+      <div><span>{role.toUpperCase()} CONFIRMATION</span><h2 id="approval-task-title">High-risk complaint · {role} confirmation</h2></div>
     </header>
     <div className="approval-customer"><UserCircle size={22} /><strong>{t("廖女士 · BMW X5")}</strong><span>VIN LBV41EP0…J47787</span><span>91 km</span></div>
     <div className="approval-conversation">
@@ -1093,12 +1091,12 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
       <div className="approval-ai-icon"><Robot size={48} /></div>
       <div>
         <div className="approval-basic-table"><table><tbody><tr><th>{t("客户")}</th><td>{t("廖女士")}</td><th>{t("车型")}</th><td>BMW X5</td></tr><tr><th>VIN</th><td>LBV41EP0…J47787</td><th>{t("当前里程")}</th><td>91 km</td></tr></tbody></table></div>
-        <p><strong>{t("客户投诉背景")}：</strong>{t("廖女士于 4 月 1 日购买 BMW X5，提车当天出现发动机抖动。经销商初步判断为点火线圈故障，但客户不接受维修并要求退车。")}</p>
-        <p><strong>{t("需要确认的信息")}：</strong>{t(result)}</p>
-        <p>{t("确认依据")}：{t(reason)}</p>
+        <p><strong>Complaint background:</strong> Ms. Liao's BMW X5 developed engine vibration on delivery day; the customer declined a repair and requested a return.</p>
+        <p><strong>Information to confirm:</strong> {result}</p>
+        <p><strong>Confirmation purpose:</strong> {reason}</p>
       </div>
     </article>
-    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} ${t("审批")}`}><button onClick={() => approveWith(`我确认 ${role} 的数据，可以继续`)}>{t("确认信息")}</button><button onClick={() => setReply(t("请更正以下信息："))}>{t("更正信息")}</button></nav>}
+    {!approved && <nav className="message-actions approval-message-actions" aria-label={`${role} confirmation`}><button onClick={() => approveWith(`I confirm the ${role} information.`)}>Confirm information</button><button onClick={() => setReply("Please correct the following information:")}>Correct information</button></nav>}
     {submittedReply && <article className="approval-user-reply"><UserCircle size={22} /><p>{t(submittedReply)}</p></article>}
     {approved && <article className="approval-confirmed"><Robot size={44} /><p>{t("收到，我已经记录你的审批意见。请继续完成左侧其余 Agent 结果的审批。")}</p></article>}
     </div>
