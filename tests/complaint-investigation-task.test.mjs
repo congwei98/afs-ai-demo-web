@@ -19,6 +19,18 @@ test("investigation agent appears only after the start action", () => {
   assert.match(workbench, /setComplaintInvestigationStarted\(true\)/);
 });
 
+test("complaint streaming keeps the conversation scrolled to the latest output", () => {
+  assert.match(workbench, /const messageList = useRef<HTMLDivElement>\(null\)/);
+  assert.match(workbench, /if \(list\) list\.scrollTop = list\.scrollHeight/);
+  assert.match(workbench, /<div className="chat-messages" ref=\{messageList\}>/);
+});
+
+test("complaint progress advances from classification to investigation and resolution review", () => {
+  assert.match(workbench, /const steps = \["Risk & Request Classification", "Complaint Investigation", "Resolution Review"\]/);
+  assert.match(workbench, /setComplaintExecutionStarted\(true\)/);
+  assert.match(workbench, /complaintKnowledgeVisible \? 2 : complaintExecutionStarted \? 1 : 0/);
+});
+
 test("complaint task is the refreshed default and supports the same FRD plan update", () => {
   assert.match(workbench, /useState<TaskView>\("complaint-investigation"\)/);
   assert.match(workbench, /startComplaintInvestigationTask\(\);/);

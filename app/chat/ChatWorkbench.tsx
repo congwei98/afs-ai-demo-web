@@ -322,6 +322,7 @@ function ChatWorkbenchContent() {
     "complaint-leading": "waiting",
   });
   const [complaintInvestigationStarted, setComplaintInvestigationStarted] = useState(false);
+  const [complaintExecutionStarted, setComplaintExecutionStarted] = useState(false);
   const [complaintPlanAgentsVisible, setComplaintPlanAgentsVisible] = useState(false);
   const [complaintWarrantyRequested, setComplaintWarrantyRequested] = useState(false);
   const [complaintConfirmationsReady, setComplaintConfirmationsReady] = useState(false);
@@ -401,6 +402,7 @@ function ChatWorkbenchContent() {
   const startComplaintInvestigationTask = () => {
     clearComplaintTimers();
     setComplaintInvestigationStarted(false);
+    setComplaintExecutionStarted(false);
     setComplaintPlanAgentsVisible(false);
     setComplaintWarrantyRequested(false);
     setComplaintConfirmationsReady(false);
@@ -806,6 +808,7 @@ function ChatWorkbenchContent() {
     }
     if (action === "Start investigation") {
       setComplaintMessages((current) => [...current, userMessage]);
+      setComplaintExecutionStarted(true);
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
       streamComplaintAssistant("All requested data checks are complete. The consolidated results are summarized below for departmental confirmation.", {
         dataResults: complaintDataResults,
@@ -902,9 +905,10 @@ function ChatWorkbenchContent() {
           {taskView !== "repair-query" && <ProcessTracker
             phase={taskView === "complaint-investigation" ? "intake" : phase}
             stage={taskView === "complaint-investigation" ? "classifying" : stage}
-            taskView={taskView === "complaint-investigation" ? "main" : taskView}
+            taskView={taskView}
             approvalCompleted={activeApprovalDone}
             progress={taskView === "complaint-investigation" ? 0 : progress}
+            complaintProgress={complaintKnowledgeVisible ? 2 : complaintExecutionStarted ? 1 : 0}
             history={history}
             graphView={graphView}
             onViewHistory={setGraphView}
@@ -1045,12 +1049,20 @@ function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, 
 
 function ComplaintInvestigationTask({ messages, onAction, input, onInput, onSubmit, investigationStarted, customerOpen, onToggleCustomer, profileReady }: { messages: Message[]; onAction: (value: string) => void; input: string; onInput: (value: string) => void; onSubmit: (event: FormEvent) => void; investigationStarted: boolean; customerOpen: boolean; onToggleCustomer: () => void; profileReady: boolean }) {
   const { t } = useLanguage();
+  const messageList = useRef<HTMLDivElement>(null);
   const latestActionMessageId = [...messages].reverse().find((message) => message.actions?.length)?.id;
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const list = messageList.current;
+      if (list) list.scrollTop = list.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages]);
   return <>
     <CustomerCard open={customerOpen} onToggle={onToggleCustomer} ready={profileReady} />
     <div className="chat-thread" aria-live="polite">
       <div className="chat-thread-heading"><div><span><Sparkle size={17} weight="fill" /></span><div><b>{t("AI 协作对话")}</b></div></div></div>
-      <div className="chat-messages">
+      <div className="chat-messages" ref={messageList}>
         {messages.map((message) => <ChatMessage key={message.id} message={message} onAction={onAction} actionsDisabled={message.id !== latestActionMessageId} />)}
       </div>
     </div>
@@ -1144,9 +1156,22 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
   </section>;
 }
 
-function ProcessTracker({ phase, stage, taskView, approvalCompleted, progress, history, graphView, onViewHistory }: { phase: Phase; stage: Stage; taskView: TaskView; approvalCompleted: boolean; progress: number; history: Phase[]; graphView: Phase | null; onViewHistory: (phase: Phase | null) => void }) {
+function ProcessTracker({ phase, stage, taskView, approvalCompleted, progress, complaintProgress, history, graphView, onViewHistory }: { phase: Phase; stage: Stage; taskView: TaskView; approvalCompleted: boolean; progress: number; complaintProgress: number; history: Phase[]; graphView: Phase | null; onViewHistory: (phase: Phase | null) => void }) {
   const { t } = useLanguage();
-  if (taskView !== "main" && taskView !== "complaint-investigation" && taskView !== "repair-query") {
+  if (taskView === "complaint-investigation") {
+    const steps = ["Risk & Request Classification", "Complaint Investigation", "Resolution Review"];
+    return <section className="process-tracker" aria-label="Complaint investigation progress">
+      <header><div><span>Current Process</span><strong>Complaint Investigation</strong></div></header>
+      <ol>{steps.map((step, index) => {
+        const done = complaintProgress > index;
+        const active = complaintProgress === index;
+        return <li key={step} className={`${done ? "done" : ""} ${active ? "active" : ""}`}>
+          <span>{done ? <Check size={15} weight="bold" /> : index + 1}</span><b>{step}</b>{index < steps.length - 1 && <i />}
+        </li>;
+      })}</ol>
+    </section>;
+  }
+  if (taskView !== "main" && taskView !== "repair-query") {
     const role = taskView === "repair-history" ? "Repair History" : taskView === "technical" ? "Technical Service" : taskView === "mobility" ? "Mobility" : taskView === "warranty" ? "Warranty" : taskView === "legal" ? "Legal" : "Parts";
     return <section className="process-tracker approval-process" aria-label="Confirmation progress">
       <header><div><span>Current confirmation task</span><strong>High-risk complaint · {role} confirmation</strong></div></header>

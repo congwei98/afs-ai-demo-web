@@ -40,7 +40,10 @@ test("production server renders the process workbench", async (context) => {
   const chatHtml = await chatResponse.text();
   assert.match(chatHtml, /AFS AI Workbench/);
   assert.match(chatHtml, /Task Center/);
-  assert.match(chatHtml, /Complaint Intake &amp; Classification/);
+  assert.match(chatHtml, /Complaint investigation progress/);
+  assert.match(chatHtml, /Risk &amp; Request Classification/);
+  assert.match(chatHtml, /Complaint Investigation/);
+  assert.match(chatHtml, /Resolution Review/);
   assert.match(chatHtml, /Complaint Leading Agent/);
   assert.match(chatHtml, /High-risk complaint investigation/);
   assert.match(chatHtml, /Process Management/);
