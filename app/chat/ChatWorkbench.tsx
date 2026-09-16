@@ -68,6 +68,7 @@ type Message = {
   card?: MessageCard;
   plan?: PlanRow[];
   dataResults?: DataResultRow[];
+  resultsPending?: boolean;
   visible: number;
   streaming?: boolean;
   tone?: "risk" | "approval";
@@ -427,9 +428,10 @@ function ChatWorkbenchContent() {
     complaintTimers.current.push(setTimeout(streamResponse, 180));
   };
 
-  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; dataResults?: DataResultRow[]; actions?: string[]; onDone?: () => void }) => {
+  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; dataResults?: DataResultRow[]; resultsDelayMs?: number; actions?: string[]; onDone?: () => void }) => {
     const id = complaintNextId.current++;
-    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, dataResults: options?.dataResults, actions: options?.actions, visible: 0, streaming: true }]);
+    const resultsPending = Boolean(options?.dataResults && options.resultsDelayMs);
+    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, dataResults: options?.dataResults, resultsPending, actions: options?.actions, visible: 0, streaming: true }]);
     let visible = 0;
     const tick = () => {
       visible += 1;
@@ -439,6 +441,13 @@ function ChatWorkbenchContent() {
         return;
       }
       setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, visible: body.length, streaming: false } : message));
+      if (resultsPending) {
+        complaintTimers.current.push(setTimeout(() => {
+          setComplaintMessages((current) => current.map((message) => message.id === id ? { ...message, resultsPending: false } : message));
+          options?.onDone?.();
+        }, options?.resultsDelayMs));
+        return;
+      }
       options?.onDone?.();
     };
     complaintTimers.current.push(setTimeout(tick, 180));
@@ -812,6 +821,7 @@ function ChatWorkbenchContent() {
       setComplaintAgentStates((current) => ({ ...current, retention: "running", "repair-history": "running", technical: "running", mobility: "running", ...(complaintWarrantyRequested ? { warranty: "running" } : {}) }));
       streamComplaintAssistant("All requested data checks are complete. The consolidated results are summarized below for departmental confirmation.", {
         dataResults: complaintDataResults,
+        resultsDelayMs: 5000,
         onDone: () => {
           setComplaintAgentStates((current) => ({ ...current, retention: "done", "repair-history": "done", technical: "done", mobility: "done", warranty: "done" }));
           setComplaintConfirmationsReady(true);
@@ -1227,7 +1237,8 @@ function ChatMessage({ message, onAction, actionsDisabled }: { message: Message;
       {message.lead && <strong className="message-lead">{t(message.lead)}</strong>}
       <p>{visibleBody}{message.streaming && <i className="stream-cursor" />}</p>
       {!message.streaming && message.plan && <div className="ai-plan-table"><table><thead><tr><th>{t("目标")}</th><th>{t("执行动作")}</th><th>{t("预期产出")}</th></tr></thead><tbody>{message.plan.map((row) => <tr key={row.purpose}><td>{t(row.purpose)}</td><td>{t(row.action)}</td><td>{t(row.expected)}</td></tr>)}</tbody></table></div>}
-      {!message.streaming && message.dataResults && <div className="ai-plan-table"><table><thead><tr><th>Agent</th><th>Data checked</th><th>Result</th></tr></thead><tbody>{message.dataResults.map((row) => <tr key={row.agent}><td>{row.agent}</td><td>{row.data}</td><td>{row.result}</td></tr>)}</tbody></table></div>}
+      {!message.streaming && message.resultsPending && <span className="data-results-loading" role="status" aria-live="polite">Loading data...</span>}
+      {!message.streaming && !message.resultsPending && message.dataResults && <div className="ai-plan-table"><table><thead><tr><th>Agent</th><th>Data checked</th><th>Result</th></tr></thead><tbody>{message.dataResults.map((row) => <tr key={row.agent}><td>{row.agent}</td><td>{row.data}</td><td>{row.result}</td></tr>)}</tbody></table></div>}
       {!message.streaming && message.bullets && <ul>{message.bullets.map((item) => <li key={item}>{t(item)}</li>)}</ul>}
       {!message.streaming && message.notes && <div className="ai-notes">{message.notes.map((note) => <p key={`${note.label}-${note.text}`}>{t(note.text)}</p>)}</div>}
       {!message.streaming && message.card && <p className="ai-result">{t(message.card.label)}: {t(message.card.value)}{message.card.meta && ` (${t(message.card.meta)})`}</p>}

@@ -86,6 +86,7 @@
 .agent-inline-running i { width:5px; height:5px; border-radius:50%; animation:agent-dot 1.2s infinite; }
 .agent-inline-running i:nth-child(2) { animation-delay:.15s; }
 .agent-inline-running i:nth-child(3) { animation-delay:.3s; }
+.data-results-loading { display:inline-block; margin-top:12px; font-size:var(--apple-font-size-caption); font-weight:650; animation:data-loading-pulse 1s ease-in-out infinite; }
 .repair-history-table { width:100%; margin-top:14px; overflow:auto; border:1px solid var(--chat-line); border-radius:var(--lg-radius-sm); }
 .repair-history-table table { width:100%; min-width:850px; border-collapse:collapse; text-align:left; }
 .repair-history-table th,.repair-history-table td { padding:10px 11px; vertical-align:top; border-bottom:1px solid var(--chat-line); }
@@ -268,6 +269,7 @@
 @keyframes recording-wave { from { transform:scaleY(.45); opacity:.55; } to { transform:scaleY(1.15); opacity:1; } }
 @keyframes agent-orbit { to { transform:rotate(360deg); } }
 @keyframes agent-dot { 0%,60%,100% { transform:translateY(0); opacity:.35; } 30% { transform:translateY(-3px); opacity:1; } }
+@keyframes data-loading-pulse { 0%,100% { opacity:.38; } 50% { opacity:1; } }
 @keyframes agent-progress { 0% { transform:scaleX(.08); opacity:.45; } 55% { transform:scaleX(.72); opacity:1; } 100% { transform:scaleX(1); opacity:.25; } }
 @keyframes agent-sweep { 0% { left:-45px; } 70%,100% { left:115%; } }
 @media (prefers-reduced-motion:reduce) { .chat-app * { scroll-behavior:auto!important; animation:none!important; } }

@@ -123,6 +123,7 @@
 .adhoc-empty svg { color:var(--chat-accent); }
 .agent-inline-running { color:var(--chat-muted); font-size:var(--apple-font-size-caption); }
 .agent-inline-running i { background:var(--chat-accent); }
+.data-results-loading { color:var(--chat-accent); }
 .repair-history-table { background:var(--chat-inset); border-color:var(--chat-line); }
 .repair-history-table th { color:var(--chat-secondary); background:var(--chat-card); font-size:var(--apple-font-size-nav); }
 .repair-history-table td { color:var(--chat-text); font-size:var(--apple-font-size-caption); line-height:1.45; }

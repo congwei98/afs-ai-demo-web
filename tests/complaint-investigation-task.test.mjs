@@ -68,6 +68,9 @@ test("all complaint data agent results render in one table message", () => {
   assert.match(workbench, /data: "Repair plan"/);
   assert.match(workbench, /data: "Courtesy car"/);
   assert.doesNotMatch(workbench, /replacement[ -]vehicle/i);
+  assert.match(workbench, /resultsDelayMs: 5000/);
+  assert.match(workbench, />Loading data\.\.\.<\/span>/);
+  assert.match(workbench, /!message\.resultsPending && message\.dataResults/);
 });
 
 test("courtesy car terminology is consistent across the English experience", () => {
