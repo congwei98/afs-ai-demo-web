@@ -47,6 +47,8 @@ test("completed complaint data checks create Technical and Mobility confirmation
   assert.match(workbench, /Mobility Team · Confirm courtesy car · Ms\. Liao/);
   assert.match(workbench, /Complaint background:/);
   assert.match(workbench, /Information to confirm:/);
+  assert.match(workbench, /The TSARA 35213 report records approval for the dealer to replace all six spark plugs\./);
+  assert.match(workbench, /Confirm that this information is accurate\./);
   assert.match(workbench, /Confirm \{confirmationSubject\}/);
   assert.match(workbench, /Correct information/);
 });

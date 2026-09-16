@@ -1125,7 +1125,7 @@ function RepairHistoryTable({ records }: { records: RepairRecord[] }) {
 function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTaskView; approved: boolean; onApprove: () => void; onBack: () => void }) {
   const approvalContent: Record<ApprovalTaskView, { role: string; reason: string; result: string }> = {
     "repair-history": { role: "Repair History", reason: "Verify that the customer's delivery-day engine-vibration account matches the dealer record.", result: "An April 2, 2026 dealer work order documents a cylinder-two ignition-coil fault that caused misfiring and vibration." },
-    technical: { role: "Technical Service", reason: "Confirm that the proposed repair plan fully addresses the documented ignition-coil fault.", result: "Replace all six ignition coils, clear the stored fault codes, and complete a road test before release." },
+    technical: { role: "Technical Service", reason: "Confirm that this information is accurate.", result: "The TSARA 35213 report records approval for the dealer to replace all six spark plugs." },
     mobility: { role: "Mobility Team", reason: "Confirm courtesy car coverage while the approved repair plan is completed.", result: "A BMW 5 Series courtesy car is available for the coming week and can cover the repair period." },
     warranty: { role: "Warranty", reason: "Confirm the vehicle's new-vehicle status using the supplemental FRD and mileage evidence.", result: "The FRD warranty start date is April 3, 2026 and the recorded mileage is 91 km." },
     legal: { role: "Legal", reason: "Confirm the returned verification result for the complaint case.", result: "The requested legal verification is complete." },
