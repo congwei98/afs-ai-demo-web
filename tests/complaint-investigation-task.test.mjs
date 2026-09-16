@@ -58,6 +58,11 @@ test("approved department tasks return a Complaint Knowledge Agent recommendatio
   assert.match(workbench, /actions: \["Approve proposal", "Update proposal"\]/);
   assert.match(workbench, /complaintKnowledgeStarted\.current/);
   assert.match(workbench, /placeholder="Do anything"/);
+  assert.match(workbench, /attachmentReview: dealerAttachmentReview/);
+  assert.match(workbench, /Dealer attachments reviewed/);
+  assert.match(workbench, /document: "Repair Work Order", status: "Pass"/);
+  assert.match(workbench, /document: "Technical Solution", status: "Pass"/);
+  assert.match(workbench, /document: "Agreement", status: "Pass"/);
 });
 
 test("all complaint data agent results render in one table message", () => {

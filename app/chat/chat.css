@@ -134,6 +134,7 @@
 .ai-plan-table { background:rgba(255,255,255,var(--lg-glass-alpha-light)); }
 .ai-plan-table th { color:var(--chat-text); background:var(--chat-inset); }
 .ai-plan-table td { color:var(--chat-secondary); }
+.knowledge-attachment-review h4,.document-status-pass { color:var(--chat-accent); }
 .approval-basic-table { background:rgba(255,255,255,var(--lg-glass-alpha-light)); }
 .approval-basic-table th { color:var(--chat-text); background:var(--chat-inset); }
 .approval-basic-table td { color:var(--chat-secondary); }

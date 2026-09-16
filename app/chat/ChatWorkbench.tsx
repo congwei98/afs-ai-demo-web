@@ -57,6 +57,7 @@ type MessageCard = { label: string; value: string; meta?: string };
 type MessageNote = { label: string; text: string; tone?: "evidence" | "decision" | "next" };
 type PlanRow = { purpose: string; action: string; expected: string };
 type DataResultRow = { agent: string; data: string; result: string };
+type AttachmentReviewRow = { document: string; status: "Pass" };
 type Message = {
   id: number;
   role: MessageRole;
@@ -68,6 +69,7 @@ type Message = {
   card?: MessageCard;
   plan?: PlanRow[];
   dataResults?: DataResultRow[];
+  attachmentReview?: AttachmentReviewRow[];
   resultsPending?: boolean;
   visible: number;
   streaming?: boolean;
@@ -226,6 +228,12 @@ const complaintDataResults: DataResultRow[] = [
     data: "FRD and mileage",
     result: "The FRD warranty start date is April 3, 2026 and the recorded mileage is 91 km, supporting the vehicle's new-vehicle status.",
   },
+];
+
+const dealerAttachmentReview: AttachmentReviewRow[] = [
+  { document: "Repair Work Order", status: "Pass" },
+  { document: "Technical Solution", status: "Pass" },
+  { document: "Agreement", status: "Pass" },
 ];
 
 const pendingTaskItems = [
@@ -428,10 +436,10 @@ function ChatWorkbenchContent() {
     complaintTimers.current.push(setTimeout(streamResponse, 180));
   };
 
-  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; dataResults?: DataResultRow[]; resultsDelayMs?: number; actions?: string[]; onDone?: () => void }) => {
+  const streamComplaintAssistant = (body: string, options?: { plan?: PlanRow[]; dataResults?: DataResultRow[]; attachmentReview?: AttachmentReviewRow[]; resultsDelayMs?: number; actions?: string[]; onDone?: () => void }) => {
     const id = complaintNextId.current++;
     const resultsPending = Boolean(options?.dataResults && options.resultsDelayMs);
-    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, dataResults: options?.dataResults, resultsPending, actions: options?.actions, visible: 0, streaming: true }]);
+    setComplaintMessages((current) => [...current, { id, role: "assistant", body, plan: options?.plan, dataResults: options?.dataResults, attachmentReview: options?.attachmentReview, resultsPending, actions: options?.actions, visible: 0, streaming: true }]);
     let visible = 0;
     const tick = () => {
       visible += 1;
@@ -788,6 +796,7 @@ function ChatWorkbenchContent() {
         setComplaintKnowledgeVisible(true);
         setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
         streamComplaintAssistant("Complaint Knowledge Agent has reviewed the approved repair plan, confirmed courtesy car support, and comparable compensation cases.\n\nThe dealer and customer have aligned on a one-year extended warranty, one engine service, two oil services, and a courtesy car, with a total value of RMB 8,300.\n\nHistorical complaints involving BMW X5 vehicles with the same ignition-coil and spark-plug repair profile were compensated between RMB 7,000 and RMB 9,500. The proposed package is within that evidence-based range, so I recommend approval.", {
+          attachmentReview: dealerAttachmentReview,
           actions: ["Approve proposal", "Update proposal"],
           onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
         });
@@ -1239,6 +1248,10 @@ function ChatMessage({ message, onAction, actionsDisabled }: { message: Message;
       {!message.streaming && message.plan && <div className="ai-plan-table"><table><thead><tr><th>{t("目标")}</th><th>{t("执行动作")}</th><th>{t("预期产出")}</th></tr></thead><tbody>{message.plan.map((row) => <tr key={row.purpose}><td>{t(row.purpose)}</td><td>{t(row.action)}</td><td>{t(row.expected)}</td></tr>)}</tbody></table></div>}
       {!message.streaming && message.resultsPending && <span className="data-results-loading" role="status" aria-live="polite">Loading data...</span>}
       {!message.streaming && !message.resultsPending && message.dataResults && <div className="ai-plan-table"><table><thead><tr><th>Agent</th><th>Data checked</th><th>Result</th></tr></thead><tbody>{message.dataResults.map((row) => <tr key={row.agent}><td>{row.agent}</td><td>{row.data}</td><td>{row.result}</td></tr>)}</tbody></table></div>}
+      {!message.streaming && message.attachmentReview && <section className="knowledge-attachment-review" aria-labelledby={`attachment-review-${message.id}`}>
+        <h4 id={`attachment-review-${message.id}`}>Dealer attachments reviewed</h4>
+        <div className="ai-plan-table attachment-review-table"><table><thead><tr><th scope="col">Document</th><th scope="col">Validation</th></tr></thead><tbody>{message.attachmentReview.map((row) => <tr key={row.document}><td>{row.document}</td><td><span className="document-status-pass"><Check size={15} weight="bold" aria-hidden="true" />{row.status}</span></td></tr>)}</tbody></table></div>
+      </section>}
       {!message.streaming && message.bullets && <ul>{message.bullets.map((item) => <li key={item}>{t(item)}</li>)}</ul>}
       {!message.streaming && message.notes && <div className="ai-notes">{message.notes.map((note) => <p key={`${note.label}-${note.text}`}>{t(note.text)}</p>)}</div>}
       {!message.streaming && message.card && <p className="ai-result">{t(message.card.label)}: {t(message.card.value)}{message.card.meta && ` (${t(message.card.meta)})`}</p>}

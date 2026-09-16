@@ -98,6 +98,12 @@
 .ai-plan-table th { font-size:var(--apple-font-size-nav); font-weight:700; }
 .ai-plan-table td { font-size:var(--apple-font-size-caption); line-height:1.45; }
 .ai-plan-table tbody tr:last-child td { border-bottom:0; }
+.knowledge-attachment-review { margin-top:16px; }
+.knowledge-attachment-review h4 { margin:0; font-size:var(--apple-font-size-nav); font-weight:700; }
+.attachment-review-table { margin-top:7px; }
+.attachment-review-table table { min-width:360px; }
+.attachment-review-table th:last-child,.attachment-review-table td:last-child { width:120px; }
+.document-status-pass { display:inline-flex; align-items:center; gap:5px; font-weight:700; white-space:nowrap; }
 .chat-message ul { margin:9px 0 0; padding-left:17px; }
 .chat-message li+li { margin-top:3px; }
 .ai-notes { margin-top:10px; display:grid; gap:6px; }
