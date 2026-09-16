@@ -196,7 +196,7 @@ const callTranscript = "客户（廖女士）：我 4 月 1 日在珠海锦泰�
 const retentionPlan: PlanRow[] = [
   { purpose: "Verify the complaint facts", action: "Retrieve the April 2 repair work order", expected: "Validate the reported ignition fault" },
   { purpose: "Confirm the repair plan", action: "Review the proposed repair plan", expected: "Approve or correct the six-coil replacement plan" },
-  { purpose: "Confirm mobility support", action: "Check the dealer replacement vehicle", expected: "Confirm mobility coverage during repair" },
+  { purpose: "Confirm courtesy car", action: "Check the dealer courtesy car", expected: "Confirm courtesy car coverage during repair" },
 ];
 
 const updatedRetentionPlan: PlanRow[] = [
@@ -217,8 +217,8 @@ const complaintDataResults: DataResultRow[] = [
   },
   {
     agent: "Mobility Data Agent",
-    data: "Replacement vehicle",
-    result: "A BMW 5 Series replacement vehicle is available for the coming week and can cover the full repair period.",
+    data: "Courtesy car",
+    result: "A BMW 5 Series courtesy car is available for the coming week and can cover the full repair period.",
   },
   {
     agent: "Warranty Data Agent",
@@ -776,7 +776,7 @@ function ChatWorkbenchContent() {
         setTaskView("complaint-investigation");
         setComplaintKnowledgeVisible(true);
         setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "running" }));
-        streamComplaintAssistant("Complaint Knowledge Agent has reviewed the approved repair plan, confirmed mobility support, and comparable compensation cases.\n\nThe dealer and customer have aligned on a one-year extended warranty, one engine service, two oil services, and a replacement vehicle, with a total value of RMB 8,300.\n\nHistorical complaints involving BMW X5 vehicles with the same ignition-coil and spark-plug repair profile were compensated between RMB 7,000 and RMB 9,500. The proposed package is within that evidence-based range, so I recommend approval.", {
+        streamComplaintAssistant("Complaint Knowledge Agent has reviewed the approved repair plan, confirmed courtesy car support, and comparable compensation cases.\n\nThe dealer and customer have aligned on a one-year extended warranty, one engine service, two oil services, and a courtesy car, with a total value of RMB 8,300.\n\nHistorical complaints involving BMW X5 vehicles with the same ignition-coil and spark-plug repair profile were compensated between RMB 7,000 and RMB 9,500. The proposed package is within that evidence-based range, so I recommend approval.", {
           actions: ["Approve proposal", "Update proposal"],
           onDone: () => setComplaintAgentStates((states) => ({ ...states, "complaint-knowledge": "done" })),
         });
@@ -794,7 +794,7 @@ function ChatWorkbenchContent() {
       setComplaintMessages((current) => [...current, userMessage]);
       setComplaintInvestigationStarted(true);
       setComplaintAgentStates({ "complaint-leading": "done", "complaint-investigation-process": "running" });
-      streamComplaintAssistant("I recommend running the investigation in the sequence below.\n\nBecause the fault appeared on delivery day, the first step is to verify the dealer work order against the customer's account. I will then retrieve the proposed repair plan so Technical Service can confirm that it fully addresses the ignition fault.\n\nI will also check replacement-vehicle availability because continuous mobility support may affect the customer's willingness to continue the resolution discussion.", {
+      streamComplaintAssistant("I recommend running the investigation in the sequence below.\n\nBecause the fault appeared on delivery day, the first step is to verify the dealer work order against the customer's account. I will then retrieve the proposed repair plan so Technical Service can confirm that it fully addresses the ignition fault.\n\nI will also check courtesy car availability because continuous mobility support may affect the customer's willingness to continue the resolution discussion.", {
         plan: retentionPlan,
         actions: ["Start investigation"],
         onDone: () => {
@@ -841,7 +841,7 @@ function ChatWorkbenchContent() {
     setComplaintInput("");
     setComplaintMessages((current) => [...current, { id: complaintNextId.current++, role: "user", body: value, visible: value.length }]);
     setComplaintAgentStates((current) => ({ ...current, retention: "running", warranty: "waiting" }));
-    streamComplaintAssistant(`I have added your information: “${value}”.\n\nThe FRD warranty start date and current mileage are now included in the investigation plan. They will be checked together with the delivery-period repair work order, the proposed repair plan, and replacement-vehicle availability. No data query has started yet. Review the updated plan below, then start the investigation.`, {
+    streamComplaintAssistant(`I have added your information: “${value}”.\n\nThe FRD warranty start date and current mileage are now included in the investigation plan. They will be checked together with the delivery-period repair work order, the proposed repair plan, and courtesy car availability. No data query has started yet. Review the updated plan below, then start the investigation.`, {
       plan: updatedRetentionPlan,
       actions: ["Start investigation"],
       onDone: () => {
@@ -1003,7 +1003,7 @@ function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, 
   if (stage === "waiting_investigation_approvals" && !approvals.warranty) approvalTasks.push({ id: "warranty", title: "Warranty Data Agent 请求业务审批｜FRD 与里程" });
   const complaintApprovalTasks = [
     complaintConfirmationsReady && !complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service · Confirm repair plan · Ms. Liao" } : null,
-    complaintConfirmationsReady && !complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Confirm replacement vehicle · Ms. Liao" } : null,
+    complaintConfirmationsReady && !complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Confirm courtesy car · Ms. Liao" } : null,
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const completedApprovalTasks = [
     approvals["repair-history"] ? { id: "repair-history" as TaskView, title: "Repair History 已确认｜维修记录" } : null,
@@ -1013,7 +1013,7 @@ function TaskSidebar({ stage, taskView, approvals, complaintConfirmationsReady, 
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const completedComplaintApprovalTasks = [
     complaintConfirmationsReady && complaintApprovals.technical ? { id: "technical" as TaskView, title: "Technical Service · Repair plan confirmed" } : null,
-    complaintConfirmationsReady && complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Replacement vehicle confirmed" } : null,
+    complaintConfirmationsReady && complaintApprovals.mobility ? { id: "mobility" as TaskView, title: "Mobility Team · Courtesy car confirmed" } : null,
   ].filter((task): task is { id: TaskView; title: string } => task !== null);
   const visiblePending = showAll ? [...createdTasks, ...pendingTaskItems] : [...createdTasks, ...pendingTaskItems].slice(0, 4);
   const visibleCompleted = showAll ? completedTaskItems : completedTaskItems.slice(0, 2);
@@ -1095,13 +1095,13 @@ function ApprovalTask({ type, approved, onApprove, onBack }: { type: ApprovalTas
   const approvalContent: Record<ApprovalTaskView, { role: string; reason: string; result: string }> = {
     "repair-history": { role: "Repair History", reason: "Verify that the customer's delivery-day engine-vibration account matches the dealer record.", result: "An April 2, 2026 dealer work order documents a cylinder-two ignition-coil fault that caused misfiring and vibration." },
     technical: { role: "Technical Service", reason: "Confirm that the proposed repair plan fully addresses the documented ignition-coil fault.", result: "Replace all six ignition coils, clear the stored fault codes, and complete a road test before release." },
-    mobility: { role: "Mobility Team", reason: "Confirm replacement-vehicle coverage while the approved repair plan is completed.", result: "A BMW 5 Series replacement vehicle is available for the coming week and can cover the repair period." },
+    mobility: { role: "Mobility Team", reason: "Confirm courtesy car coverage while the approved repair plan is completed.", result: "A BMW 5 Series courtesy car is available for the coming week and can cover the repair period." },
     warranty: { role: "Warranty", reason: "Confirm the vehicle's new-vehicle status using the supplemental FRD and mileage evidence.", result: "The FRD warranty start date is April 3, 2026 and the recorded mileage is 91 km." },
     legal: { role: "Legal", reason: "Confirm the returned verification result for the complaint case.", result: "The requested legal verification is complete." },
     parts: { role: "Parts", reason: "Confirm the returned verification result for the complaint case.", result: "The requested parts verification is complete." },
   };
   const { role, reason, result } = approvalContent[type];
-  const confirmationSubject = type === "technical" ? "repair plan" : type === "mobility" ? "replacement vehicle" : `${role.toLowerCase()} information`;
+  const confirmationSubject = type === "technical" ? "repair plan" : type === "mobility" ? "courtesy car" : `${role.toLowerCase()} information`;
   const [reply, setReply] = useState("");
   const [submittedReply, setSubmittedReply] = useState("");
   const approvalFileInput = useRef<HTMLInputElement>(null);

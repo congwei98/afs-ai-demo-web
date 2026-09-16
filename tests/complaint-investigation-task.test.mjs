@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workbench = readFileSync(new URL("../app/chat/ChatWorkbench.tsx", import.meta.url), "utf8");
+const translations = readFileSync(new URL("../app/chat/i18n.tsx", import.meta.url), "utf8");
 
 test("complaint investigation task keeps the requested first-turn experience", () => {
   assert.match(workbench, /lead: "A high-risk complaint has been identified\."/);
@@ -31,7 +32,7 @@ test("complaint task is the refreshed default and supports the same FRD plan upd
 test("completed complaint data checks create Technical and Mobility confirmation tasks", () => {
   assert.match(workbench, /setComplaintConfirmationsReady\(true\)/);
   assert.match(workbench, /Technical Service · Confirm repair plan · Ms\. Liao/);
-  assert.match(workbench, /Mobility Team · Confirm replacement vehicle · Ms\. Liao/);
+  assert.match(workbench, /Mobility Team · Confirm courtesy car · Ms\. Liao/);
   assert.match(workbench, /Complaint background:/);
   assert.match(workbench, /Information to confirm:/);
   assert.match(workbench, /Confirm \{confirmationSubject\}/);
@@ -53,6 +54,14 @@ test("all complaint data agent results render in one table message", () => {
   assert.match(workbench, /<th>Agent<\/th><th>Data checked<\/th><th>Result<\/th>/);
   assert.doesNotMatch(workbench, /Repair History Data Agent result:/);
   assert.match(workbench, /data: "Repair plan"/);
+  assert.match(workbench, /data: "Courtesy car"/);
+  assert.doesNotMatch(workbench, /replacement[ -]vehicle/i);
+});
+
+test("courtesy car terminology is consistent across the English experience", () => {
+  assert.doesNotMatch(`${workbench}\n${translations}`, /replacement[ -]vehicle|loaner/i);
+  assert.match(workbench, /Confirm courtesy car/);
+  assert.match(translations, /Courtesy car availability/);
 });
 
 test("proposal approval ends with a confirmation-only message", () => {
